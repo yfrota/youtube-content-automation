@@ -8,7 +8,14 @@
 // (and `type` aliases of them) an implicit index signature for that
 // structural check; `interface` declarations are excluded from it.
 
-export type PlatformType = "youtube" | "instagram" | "facebook" | "linkedin";
+// spotify/tiktok added in 0009.
+export type PlatformType =
+  | "youtube"
+  | "instagram"
+  | "facebook"
+  | "linkedin"
+  | "spotify"
+  | "tiktok";
 
 // Content language (0006_project_language.sql) — unlike PlatformType, this
 // is a plain `text` column, not a Postgres enum; this union is the only

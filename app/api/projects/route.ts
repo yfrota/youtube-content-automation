@@ -102,7 +102,9 @@ export async function GET(request: Request) {
   // /api/connectors/youtube/index always have external_video_id set.
   let projectsQuery = supabase
     .from("projects")
-    .select("id, title, platform, status, priority, deadline, tags, updated_at")
+    .select(
+      "id, title, platform, status, external_channel_id, priority, deadline, tags, created_at, updated_at"
+    )
     .eq("client_id", clientId)
     .is("external_video_id", null);
   if (q) projectsQuery = projectsQuery.ilike("title", `%${q}%`);
@@ -180,9 +182,11 @@ export async function GET(request: Request) {
       title: project.title,
       platform: project.platform,
       client: clientProfile,
+      channelUrl: project.external_channel_id,
       priority: (project.priority ?? "normal") as Priority,
       deadline: project.deadline,
       tags: Array.isArray(project.tags) ? (project.tags as string[]) : [],
+      createdAt: project.created_at,
       updatedAt: project.updated_at,
       modules,
     };

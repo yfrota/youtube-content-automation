@@ -207,3 +207,36 @@ export async function PATCH(
 
   return NextResponse.json({ project: data });
 }
+
+// TODO(auth): protect this route once Supabase Auth + tenant membership
+// exists (see docs/rls-policies.md).
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  if (!DEV_CLIENT_ID) {
+    return NextResponse.json({ error: "Missing DEV_CLIENT_ID" }, { status: 500 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  // projects -> scripts/seo/thumbnails/approval_events is `on delete
+  // cascade` (0001) — deleting a project is meant to take its own pipeline
+  // history with it, unlike client deletion (which is blocked instead).
+  const { data, error } = await supabase
+    .from("projects")
+    .delete()
+    .eq("id", id)
+    .eq("client_id", DEV_CLIENT_ID)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+
+  return new NextResponse(null, { status: 204 });
+}

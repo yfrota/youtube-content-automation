@@ -8,7 +8,9 @@ export type ApprovalStatus =
   | "approved"
   | "published";
 
-export type Platform = "youtube" | "instagram" | "facebook" | "linkedin";
+// spotify/tiktok added in 0009 (platform_type enum) — enum-valid, but no
+// connector/agent support exists for either yet.
+export type Platform = "youtube" | "instagram" | "facebook" | "linkedin" | "spotify" | "tiktok";
 
 // Content language, set per-project (see 0006_project_language.sql) — not a
 // Postgres enum, the new-project form is the actual constraint.
@@ -69,9 +71,11 @@ export interface Project {
   title: string;
   platform: Platform;
   client: ClientProfile;
+  channelUrl: string | null;
   priority: Priority;
   deadline: string | null; // ISO 8601 date, no time component
   tags: string[];
+  createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   modules: PipelineModule[];
 }
@@ -152,6 +156,44 @@ export const STATUS_LABELS: Record<ApprovalStatus, string> = {
   client_review: "Revisão do cliente",
   approved: "Aprovado",
   published: "Publicado",
+};
+
+export const PLATFORM_LABELS: Record<Platform, string> = {
+  youtube: "YouTube",
+  instagram: "Instagram",
+  facebook: "Facebook",
+  linkedin: "LinkedIn",
+  spotify: "Spotify",
+  tiktok: "TikTok",
+};
+
+// Brand colors, used verbatim (not the app's muted palette) so the platform
+// badge reads as "this is YouTube/Instagram/etc" at a glance. Selectable in
+// the new-project form's picker as of 0009, but spotify/tiktok still have no
+// connector or agent behind them — same gap instagram/facebook/linkedin have
+// had since 0001.
+export const PLATFORM_BADGE_STYLES: Record<Platform, { background: string; color: string }> = {
+  youtube: { background: "#FF0000", color: "#ffffff" },
+  instagram: { background: "linear-gradient(45deg, #833AB4, #FD1D1D)", color: "#ffffff" },
+  linkedin: { background: "#0A66C2", color: "#ffffff" },
+  facebook: { background: "#1877F2", color: "#ffffff" },
+  spotify: { background: "#1DB954", color: "#ffffff" },
+  tiktok: { background: "#000000", color: "#ffffff" },
+};
+
+export const PRIORITY_LABELS: Record<Priority, string> = {
+  low: "Baixa",
+  normal: "Normal",
+  high: "Alta",
+  urgent: "Urgente",
+};
+
+// "normal" intentionally has no entry — it's the common case and gets no
+// badge at all, only low/high/urgent stand out on the card.
+export const PRIORITY_BADGE_STYLES: Partial<Record<Priority, string>> = {
+  urgent: "bg-red-500 text-white",
+  high: "bg-orange-500 text-white",
+  low: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
 };
 
 // Stages count as "done" for progress purposes once approved or published.

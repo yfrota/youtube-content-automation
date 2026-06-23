@@ -2,20 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { Avatar } from "@/components/dashboard/Avatar";
 import { Breadcrumb } from "@/components/dashboard/Breadcrumb";
 import { ProgressBar } from "@/components/dashboard/ProgressBar";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { PlayCircleIcon } from "@/components/icons";
 import { PipelineStage, type StageState } from "@/components/project-detail/PipelineStage";
 import { ScriptStage } from "@/components/project-detail/ScriptStage";
 import { SeoStage } from "@/components/project-detail/SeoStage";
 import { LockedStageContent } from "@/components/project-detail/LockedStageContent";
 import { relativeTime } from "@/lib/time";
-import type {
-  ApprovalStatus,
-  ProjectDetail,
-  ScriptDetail,
-  SeoData,
+import {
+  PLATFORM_BADGE_STYLES,
+  PLATFORM_LABELS,
+  type ApprovalStatus,
+  type ProjectDetail,
+  type ScriptDetail,
+  type SeoData,
 } from "@/lib/dashboard/types";
 
 // Stage 1 stays expanded while still being worked on (draft) or sitting in
@@ -68,7 +70,7 @@ export default function ProjectDetailPage() {
   if (error) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-12 sm:px-8 sm:py-16">
-        <Breadcrumb items={[{ label: "Início" }, { label: "Dashboard" }]} />
+        <Breadcrumb items={[{ label: "Início", href: "/" }, { label: "Dashboard" }]} />
         <div className="mt-10 flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 px-8 py-20 text-center dark:border-gray-800">
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Não foi possível carregar o projeto.
@@ -109,19 +111,37 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12 sm:px-8 sm:py-16">
-      <Breadcrumb items={[{ label: "Início" }, { label: "Dashboard" }, { label: project.title }]} />
+      <Breadcrumb
+        items={[
+          { label: "Início", href: "/" },
+          { label: "Dashboard", href: "/dashboard" },
+          { label: project.title },
+        ]}
+      />
 
       <header className="mt-6">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Avatar name={project.client.name} imageUrl={project.client.imageUrl} />
+          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            {project.client.name}
+          </span>
+        </div>
+        {project.channelUrl && (
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{project.channelUrl}</p>
+        )}
+
+        <div className="mt-3 flex items-start justify-between gap-3">
           <h1 className="text-2xl font-light tracking-tight text-foreground">
             {project.title}
           </h1>
           <span
-            className="flex shrink-0 items-center gap-1 rounded-full bg-gray-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:bg-gray-800/60 dark:text-gray-500"
-            title="YouTube"
+            style={{
+              background: PLATFORM_BADGE_STYLES[project.platform].background,
+              color: PLATFORM_BADGE_STYLES[project.platform].color,
+            }}
+            className="flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
           >
-            <PlayCircleIcon className="h-3.5 w-3.5" />
-            YouTube
+            {PLATFORM_LABELS[project.platform]}
           </span>
         </div>
         <p className="mt-2 text-sm text-gray-400 dark:text-gray-500">

@@ -3,6 +3,17 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Breadcrumb } from "@/components/dashboard/Breadcrumb";
+import {
+  ChevronDownIcon,
+  FacebookIcon,
+  InstagramIcon,
+  LinkedinIcon,
+  PlayCircleIcon,
+  SpotifyIcon,
+  TiktokIcon,
+} from "@/components/icons";
+import { PRIORITY_LABELS } from "@/lib/dashboard/types";
+import type { Priority } from "@/lib/dashboard/types";
 
 function Spinner() {
   return (
@@ -24,13 +35,53 @@ function Spinner() {
   );
 }
 
+// All six are enum-valid (instagram/facebook/linkedin since 0001, spotify/
+// tiktok since 0009) and all six are selectable here — none has a connector
+// or agent behind it yet besides YouTube, same pre-connector gap YouTube
+// itself once had. `enabled` is kept (rather than dropped now that it's
+// always true) so a future platform can be added to the enum without a UI
+// connector/agent ready, same as these five, and land here disabled.
+const PLATFORM_OPTIONS = [
+  { value: "youtube", label: "YouTube", Icon: PlayCircleIcon, color: "#FF0000", enabled: true },
+  { value: "instagram", label: "Instagram", Icon: InstagramIcon, color: "#C13584", enabled: true },
+  { value: "linkedin", label: "LinkedIn", Icon: LinkedinIcon, color: "#0A66C2", enabled: true },
+  { value: "facebook", label: "Facebook", Icon: FacebookIcon, color: "#1877F2", enabled: true },
+  { value: "spotify", label: "Spotify", Icon: SpotifyIcon, color: "#1DB954", enabled: true },
+  { value: "tiktok", label: "TikTok", Icon: TiktokIcon, color: "#000000", enabled: true },
+] as const;
+
+type PlatformOption = (typeof PLATFORM_OPTIONS)[number]["value"];
+
+const PRIORITIES: Priority[] = ["normal", "high", "urgent", "low"];
+
 export default function NewProjectPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
+  const [platform, setPlatform] = useState<PlatformOption>("youtube");
   const [channelUrl, setChannelUrl] = useState("");
   const [language, setLanguage] = useState<"pt-BR" | "en-US">("pt-BR");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [priority, setPriority] = useState<Priority>("normal");
+  const [deadline, setDeadline] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+
+  function addTag() {
+    const value = tagInput.trim();
+    if (!value || tags.includes(value)) {
+      setTagInput("");
+      return;
+    }
+    setTags((prev) => [...prev, value]);
+    setTagInput("");
+  }
+
+  function removeTag(tag: string) {
+    setTags((prev) => prev.filter((t) => t !== tag));
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,10 +94,13 @@ export default function NewProjectPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          platform: "youtube",
+          platform,
           title,
           externalChannelId: channelUrl.trim() || undefined,
           language,
+          priority,
+          deadline: deadline || undefined,
+          tags,
         }),
       });
       const body = await res.json();
@@ -60,7 +114,13 @@ export default function NewProjectPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12 sm:px-8 sm:py-16">
-      <Breadcrumb items={[{ label: "Início" }, { label: "Dashboard" }, { label: "Novo projeto" }]} />
+      <Breadcrumb
+        items={[
+          { label: "Início", href: "/" },
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Novo projeto" },
+        ]}
+      />
 
       <h1 className="mt-6 text-2xl font-light tracking-tight text-foreground">
         Novo projeto
@@ -77,7 +137,7 @@ export default function NewProjectPage() {
         <div className="flex flex-col gap-6">
           <label className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              Nome do vídeo
+              Nome do projeto
             </span>
             <input
               type="text"
@@ -89,18 +149,35 @@ export default function NewProjectPage() {
             />
           </label>
 
-          <label className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
               Plataforma
             </span>
-            <select
-              disabled
-              value="youtube"
-              className="h-11 rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-500 outline-none dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400"
-            >
-              <option value="youtube">YouTube</option>
-            </select>
-          </label>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {PLATFORM_OPTIONS.map(({ value, label, Icon, color, enabled }) => {
+                const selected = value === platform;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={!enabled}
+                    onClick={() => setPlatform(value)}
+                    title={enabled ? label : `${label} (em breve)`}
+                    className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors duration-200 ${
+                      selected
+                        ? "border-accent bg-accent/5"
+                        : "border-gray-200 dark:border-gray-700"
+                    } ${enabled ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/40" : "cursor-not-allowed opacity-40"}`}
+                  >
+                    <Icon className="h-5 w-5" style={{ color }} />
+                    <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300">
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <label className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
@@ -113,6 +190,9 @@ export default function NewProjectPage() {
               placeholder="https://www.youtube.com/@seucanal"
               className="h-11 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
             />
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              Usado para indexar o catálogo de vídeos via RAG.
+            </span>
           </label>
 
           <label className="flex flex-col gap-2">
@@ -128,6 +208,91 @@ export default function NewProjectPage() {
               <option value="en-US">English (US)</option>
             </select>
           </label>
+
+          <div className="rounded-lg border border-gray-200 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-gray-600 dark:text-gray-300"
+            >
+              Configurações avançadas
+              <ChevronDownIcon
+                className={`h-4 w-4 transition-transform duration-200 ${advancedOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {advancedOpen && (
+              <div className="animate-fade-in flex flex-col gap-5 border-t border-gray-200 p-4 dark:border-gray-800">
+                <label className="flex flex-col gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    Prioridade
+                  </span>
+                  <select
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value as Priority)}
+                    className="h-10 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 focus:border-accent dark:border-gray-700"
+                  >
+                    {PRIORITIES.map((p) => (
+                      <option key={p} value={p}>
+                        {PRIORITY_LABELS[p]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    Prazo
+                  </span>
+                  <input
+                    type="date"
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                    className="h-10 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 focus:border-accent dark:border-gray-700"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    Tags
+                  </span>
+                  {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                        >
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => removeTag(tag)}
+                            aria-label={`Remover tag ${tag}`}
+                            className="text-gray-400 hover:text-foreground"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addTag();
+                      }
+                    }}
+                    placeholder="Digite e pressione Enter..."
+                    className="h-10 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
+                  />
+                </label>
+              </div>
+            )}
+          </div>
         </div>
 
         {error && (

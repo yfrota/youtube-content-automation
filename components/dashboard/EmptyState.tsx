@@ -1,6 +1,16 @@
 import { PlusIcon } from "@/components/icons";
 
-export function EmptyState({ onCreate }: { onCreate?: () => void }) {
+export function EmptyState({
+  onCreate,
+  title = "Nenhum projeto ainda",
+  message = "Crie seu primeiro projeto para começar a transformar transcrições em roteiros, SEO e thumbnails prontos para publicar.",
+  showCreateButton = true,
+}: {
+  onCreate?: () => void;
+  title?: string;
+  message?: string;
+  showCreateButton?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 px-8 py-20 text-center dark:border-gray-800">
       <svg
@@ -41,22 +51,19 @@ export function EmptyState({ onCreate }: { onCreate?: () => void }) {
         />
       </svg>
 
-      <h3 className="mt-6 text-lg font-light text-foreground">
-        Nenhum projeto ainda
-      </h3>
-      <p className="mt-2 max-w-sm text-sm text-gray-500 dark:text-gray-400">
-        Crie seu primeiro projeto para começar a transformar transcrições em
-        roteiros, SEO e thumbnails prontos para publicar.
-      </p>
+      <h3 className="mt-6 text-lg font-light text-foreground">{title}</h3>
+      <p className="mt-2 max-w-sm text-sm text-gray-500 dark:text-gray-400">{message}</p>
 
-      <button
-        type="button"
-        onClick={onCreate}
-        className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover"
-      >
-        <PlusIcon className="h-4 w-4" />
-        Novo projeto
-      </button>
+      {showCreateButton && (
+        <button
+          type="button"
+          onClick={onCreate}
+          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover"
+        >
+          <PlusIcon className="h-4 w-4" />
+          Novo projeto
+        </button>
+      )}
     </div>
   );
 }

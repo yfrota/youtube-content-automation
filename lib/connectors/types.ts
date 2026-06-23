@@ -1,4 +1,7 @@
-export type Platform = "youtube" | "instagram" | "facebook" | "linkedin";
+// spotify/tiktok added in 0009 (platform_type enum) — no connector or agent
+// support for either yet, same "enum allows it, nothing implements it" gap
+// instagram/facebook/linkedin have had since 0001.
+export type Platform = "youtube" | "instagram" | "facebook" | "linkedin" | "spotify" | "tiktok";
 
 export interface ConnectorVideo {
   externalVideoId: string;
