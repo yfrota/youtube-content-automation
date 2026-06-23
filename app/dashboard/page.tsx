@@ -7,7 +7,7 @@ import { ProjectCard } from "@/components/dashboard/ProjectCard";
 import { ProjectGridSkeleton } from "@/components/dashboard/Skeleton";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { useToast } from "@/components/dashboard/toast";
-import { MOCK_PROJECTS, type MockProject } from "@/lib/mock/projects";
+import type { Project } from "@/lib/dashboard/types";
 
 function Spinner() {
   return (
@@ -36,18 +36,29 @@ function Spinner() {
 
 export default function DashboardPage() {
   const { showToast } = useToast();
-  const [projects, setProjects] = useState<MockProject[] | null>(null);
+  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  // Simulate the initial data fetch so the skeleton + load toast are visible.
-  // Cleanup clears the timer, which also collapses React StrictMode's
-  // double-invoke in dev into a single toast.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setProjects(MOCK_PROJECTS);
-      showToast("Projetos carregados");
-    }, 700);
-    return () => clearTimeout(timer);
+    const controller = new AbortController();
+
+    async function load() {
+      try {
+        const res = await fetch("/api/projects", { signal: controller.signal });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body?.error ?? "Falha ao carregar projetos");
+        setProjects(body.projects);
+        setError(null);
+        showToast("Projetos carregados");
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : "Falha ao carregar projetos");
+      }
+    }
+
+    load();
+    return () => controller.abort();
   }, [showToast]);
 
   function handleCreate() {
@@ -59,8 +70,7 @@ export default function DashboardPage() {
     }, 900);
   }
 
-  const loading = projects === null;
-  const isEmpty = projects !== null && projects.length === 0;
+  const loading = projects === null && error === null;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-12 sm:px-8 sm:py-16">
@@ -89,14 +99,21 @@ export default function DashboardPage() {
       <section className="mt-10">
         {loading ? (
           <ProjectGridSkeleton />
-        ) : isEmpty ? (
-          <EmptyState onCreate={handleCreate} />
-        ) : (
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 px-8 py-20 text-center dark:border-gray-800">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Não foi possível carregar os projetos.
+            </p>
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{error}</p>
+          </div>
+        ) : projects && projects.length > 0 ? (
           <div className="grid animate-fade-in grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
               <ProjectCard key={project.id} project={project} />
             ))}
           </div>
+        ) : (
+          <EmptyState onCreate={handleCreate} />
         )}
       </section>
     </div>

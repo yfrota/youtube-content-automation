@@ -12,9 +12,9 @@ import {
 import {
   MODULE_LABELS,
   projectProgress,
-  type MockProject,
+  type Project,
   type ModuleKey,
-} from "@/lib/mock/projects";
+} from "@/lib/dashboard/types";
 import { relativeTime } from "@/lib/time";
 import { StatusBadge } from "./StatusBadge";
 import { ProgressBar } from "./ProgressBar";
@@ -27,7 +27,7 @@ const MODULE_ICONS: Record<ModuleKey, ComponentType<SVGProps<SVGSVGElement>>> = 
   checklist: ChecklistIcon,
 };
 
-export function ProjectCard({ project }: { project: MockProject }) {
+export function ProjectCard({ project }: { project: Project }) {
   const [open, setOpen] = useState(false);
   const progress = projectProgress(project);
 

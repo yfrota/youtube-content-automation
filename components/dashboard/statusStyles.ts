@@ -1,4 +1,4 @@
-import type { ApprovalStatus } from "@/lib/mock/projects";
+import type { ApprovalStatus } from "@/lib/dashboard/types";
 
 // "In review" states get a pulsing dot to signal they're waiting on a human.
 export function isAwaitingReview(status: ApprovalStatus): boolean {

@@ -1,5 +1,5 @@
-import type { ApprovalStatus } from "@/lib/mock/projects";
-import { STATUS_LABELS } from "@/lib/mock/projects";
+import type { ApprovalStatus } from "@/lib/dashboard/types";
+import { STATUS_LABELS } from "@/lib/dashboard/types";
 import { BADGE_STYLES, isAwaitingReview } from "./statusStyles";
 
 export function StatusBadge({ status }: { status: ApprovalStatus }) {

@@ -69,6 +69,36 @@ type ScriptsRow = {
   updated_at: string;
 };
 
+type SeoRow = {
+  id: string;
+  client_id: string;
+  project_id: string;
+  script_id: string;
+  platform: PlatformType;
+  title_options: Json;
+  description: string | null;
+  keywords: Json;
+  llm_provider: string | null;
+  status: ApprovalStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+type ThumbnailsRow = {
+  id: string;
+  client_id: string;
+  project_id: string;
+  script_id: string | null;
+  platform: PlatformType;
+  copy_options: Json;
+  image_url: string | null;
+  image_storage_path: string | null;
+  llm_provider: string | null;
+  status: ApprovalStatus;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -100,6 +130,27 @@ export type Database = {
         Update: Partial<Omit<ScriptsRow, "embedding">> & {
           embedding?: number[] | null;
         };
+        Relationships: [];
+      };
+      seo: {
+        Row: SeoRow;
+        Insert: Partial<SeoRow> & {
+          client_id: string;
+          project_id: string;
+          script_id: string;
+          platform: PlatformType;
+        };
+        Update: Partial<SeoRow>;
+        Relationships: [];
+      };
+      thumbnails: {
+        Row: ThumbnailsRow;
+        Insert: Partial<ThumbnailsRow> & {
+          client_id: string;
+          project_id: string;
+          platform: PlatformType;
+        };
+        Update: Partial<ThumbnailsRow>;
         Relationships: [];
       };
     };
