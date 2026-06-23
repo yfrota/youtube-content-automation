@@ -5,8 +5,16 @@ import { embedText } from "@/lib/rag/embeddings";
 import type { ScriptChapter, ScriptForgeInput, ScriptForgeOutput } from "./types";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const MODEL = "google/gemini-flash-1.5";
+// gemini-flash-1.5 was retired from OpenRouter's catalog ("No endpoints
+// found"); 2.5 is the current stable Flash tier, verified against this
+// account with forced tool_choice during manual testing.
+const MODEL = "google/gemini-2.5-flash";
 const TOOL_NAME = "emit_script";
+// Without an explicit cap, OpenRouter defaults to the model's max output
+// (65535 for this model) and the request gets rejected with a 402 if the
+// account can't afford that many tokens — verified this fails silently
+// otherwise (no warning, just a hard error) during manual testing.
+const MAX_OUTPUT_TOKENS = 4096;
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
 
@@ -84,6 +92,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
 
   const response = await getOpenRouter().chat.completions.create({
     model: MODEL,
+    max_tokens: MAX_OUTPUT_TOKENS,
     tools: [SCRIPT_TOOL],
     // "required" rather than forcing this specific function by name: more
     // broadly supported across the different models OpenRouter proxies to,

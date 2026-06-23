@@ -1,5 +1,8 @@
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const EMBEDDING_MODEL = "text-embedding-004";
+// text-embedding-004 was retired by Google; gemini-embedding-001 is its
+// replacement and still honors outputDimensionality (verified at 768 against
+// both :embedContent and :batchEmbedContents during manual testing).
+const EMBEDDING_MODEL = "gemini-embedding-001";
 const EMBEDDING_DIMENSIONS = 768; // matches scripts.embedding vector(768)
 
 interface GeminiEmbedContentResponse {
