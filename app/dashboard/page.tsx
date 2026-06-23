@@ -68,7 +68,7 @@ export default function DashboardPage() {
 
       <header className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-light tracking-tight text-foreground">
+          <h1 className="text-2xl font-light tracking-tight text-foreground">
             Projetos
           </h1>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
@@ -92,7 +92,7 @@ export default function DashboardPage() {
         ) : isEmpty ? (
           <EmptyState onCreate={handleCreate} />
         ) : (
-          <div className="grid animate-fade-in grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid animate-fade-in grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
               <ProjectCard key={project.id} project={project} />
             ))}

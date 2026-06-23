@@ -18,11 +18,14 @@ export const BADGE_STYLES: Record<ApprovalStatus, string> = {
   published: "bg-accent/10 text-accent dark:bg-accent/15",
 };
 
-// Dot color for the pipeline-stage indicators.
+// Dot color for the pipeline-stage indicators. Both "done" states
+// (approved + published) read green, so a fully-published project shows all
+// green dots; accent blue stays reserved for the progress bar and the
+// "Publicado" badge in the detail view.
 export const DOT_STYLES: Record<ApprovalStatus, string> = {
   draft: "bg-gray-300 dark:bg-gray-600",
   kelly_review: "bg-blue-400",
   client_review: "bg-blue-400",
   approved: "bg-green-500",
-  published: "bg-accent",
+  published: "bg-green-500",
 };
