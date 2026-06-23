@@ -36,6 +36,12 @@ type ClientsRow = {
   slug: string;
   contact_email: string | null;
   status: string;
+  // Profile fields added in 0008 — image_url/description/phone are new
+  // columns; email is intentionally NOT a new column here, contact_email
+  // above already covers it (see 0008's migration comment).
+  image_url: string | null;
+  description: string | null;
+  phone: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -49,6 +55,12 @@ type ProjectsRow = {
   external_video_id: string | null;
   language: LanguageType;
   status: ApprovalStatus;
+  // Added in 0008. priority is a plain text column constrained at the
+  // application layer only, same precedent as `language` (0006) — not a
+  // Postgres enum/check.
+  priority: string | null;
+  deadline: string | null;
+  tags: Json | null;
   created_at: string;
   updated_at: string;
 };

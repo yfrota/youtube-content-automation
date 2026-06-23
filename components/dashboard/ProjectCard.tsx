@@ -30,7 +30,7 @@ export function ProjectCard({ project }: { project: Project }) {
       </div>
 
       <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
-        {project.channelName} · {relativeTime(project.updatedAt)}
+        {project.client.name} · {relativeTime(project.updatedAt)}
       </p>
 
       <div className="mt-5 flex items-center gap-3">

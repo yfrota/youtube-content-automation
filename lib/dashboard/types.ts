@@ -21,11 +21,57 @@ export interface PipelineModule {
   status: ApprovalStatus;
 }
 
+// `type`, not `interface` — same structural-typing reason as ScriptChapter
+// (CLAUDE.md's type gotchas section), even though this doesn't round-trip
+// through a jsonb column directly. email is the clients.contact_email
+// column under a friendlier name (see 0008's migration comment) — there is
+// no separate `email` column.
+export type ClientProfile = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  description: string | null;
+  email: string | null;
+  phone: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Priority = "low" | "normal" | "high" | "urgent";
+
+// Shared by every route that joins or queries `clients` directly (clients
+// list/detail, the projects list join, project detail) so the
+// contact_email-as-email mapping lives in one place.
+export function toClientProfile(row: {
+  id: string;
+  name: string;
+  image_url: string | null;
+  description: string | null;
+  contact_email: string | null;
+  phone: string | null;
+  created_at: string;
+  updated_at: string;
+}): ClientProfile {
+  return {
+    id: row.id,
+    name: row.name,
+    imageUrl: row.image_url,
+    description: row.description,
+    email: row.contact_email,
+    phone: row.phone,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export interface Project {
   id: string;
   title: string;
   platform: Platform;
-  channelName: string;
+  client: ClientProfile;
+  priority: Priority;
+  deadline: string | null; // ISO 8601 date, no time component
+  tags: string[];
   updatedAt: string; // ISO 8601
   modules: PipelineModule[];
 }
@@ -80,6 +126,11 @@ export interface ProjectDetail {
   platform: Platform;
   language: Language;
   status: ApprovalStatus;
+  client: ClientProfile;
+  channelUrl: string | null;
+  priority: Priority;
+  deadline: string | null;
+  tags: string[];
   createdAt: string;
   updatedAt: string;
   script: ScriptDetail | null;

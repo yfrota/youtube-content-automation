@@ -2,10 +2,6 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { generateSeo } from "@/lib/agents/seo-engine";
 
-// TODO(auth): replace with the authenticated user's client_id once Supabase
-// Auth + tenant membership exists (see docs/rls-policies.md).
-const DEV_CLIENT_ID = process.env.DEV_CLIENT_ID;
-
 // Script must have at least cleared internal review before SEO can be
 // generated from it — generating SEO off an unreviewed draft would mean
 // redoing it the moment the script itself changes.
@@ -15,19 +11,22 @@ const ELIGIBLE_SCRIPT_STATUSES = ["kelly_review", "client_review", "approved"];
 // exists (see docs/rls-policies.md).
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
-  const clientId = body?.clientId ?? DEV_CLIENT_ID;
-  if (!clientId || !body?.projectId || !body?.scriptId) {
+  if (!body?.projectId || !body?.scriptId) {
     return NextResponse.json(
-      { error: "clientId, projectId, and scriptId are required" },
+      { error: "projectId and scriptId are required" },
       { status: 400 }
     );
   }
 
   const supabase = getSupabaseAdmin();
 
+  // client_id comes from the project row, not the body — same reasoning as
+  // script-forge's route: trusting a caller-supplied clientId would let a
+  // mismatched projectId/clientId pair search a different client's RAG
+  // catalog (see CLAUDE.md's RAG client isolation note).
   const { data: project, error: projectError } = await supabase
     .from("projects")
-    .select("title, platform, language")
+    .select("client_id, title, platform, language")
     .eq("id", body.projectId)
     .maybeSingle();
   if (projectError) {
@@ -36,6 +35,7 @@ export async function POST(request: Request) {
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
+  const clientId = project.client_id;
 
   const { data: script, error: scriptError } = await supabase
     .from("scripts")
