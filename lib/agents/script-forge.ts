@@ -90,7 +90,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
       ? matches
           .map(
             (m, i) =>
-              `[${i + 1}] (similarity ${m.similarity.toFixed(3)}) project_id=${m.projectId}\n${m.content.slice(0, CONTEXT_SNIPPET_CHAR_LIMIT)}`
+              `[${i + 1}] "${m.title}" (similarity ${m.similarity.toFixed(3)})\n${m.content.slice(0, CONTEXT_SNIPPET_CHAR_LIMIT)}`
           )
           .join("\n\n")
       : "No related existing videos were found in the catalog.";
@@ -112,6 +112,8 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
           `${LANGUAGE_INSTRUCTIONS[language]}\n\n` +
           "RELATED EXISTING VIDEOS FROM THIS CHANNEL'S CATALOG (for cross-referencing — mention " +
           `or link to relevant ones in the script body where natural):\n${contextBlock}\n\n` +
+          "When mentioning a previous video from the channel, always use its TITLE — never an " +
+          "internal id or code.\n\n" +
           `RAW TRANSCRIPT:\n${rawTranscript}`,
       },
     ],

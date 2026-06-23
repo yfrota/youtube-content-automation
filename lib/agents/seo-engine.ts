@@ -110,7 +110,7 @@ export async function generateSeo(
       ? matches
           .map(
             (m, i) =>
-              `[${i + 1}] (similarity ${m.similarity.toFixed(3)}) project_id=${m.projectId}\n${m.content.slice(0, CONTEXT_SNIPPET_CHAR_LIMIT)}`
+              `[${i + 1}] "${m.title}" (similarity ${m.similarity.toFixed(3)})\n${m.content.slice(0, CONTEXT_SNIPPET_CHAR_LIMIT)}`
           )
           .join("\n\n")
       : "No related existing videos were found in the catalog.";
@@ -137,7 +137,8 @@ export async function generateSeo(
           `PROJECT TITLE: ${projectTitle}\n` +
           `HOOK: ${hook}\n` +
           `CHAPTERS:\n${chaptersBlock}\n\n` +
-          "RELATED EXISTING VIDEOS FROM THIS CHANNEL'S CATALOG (for context):\n" +
+          "RELATED EXISTING VIDEOS FROM THIS CHANNEL'S CATALOG (for context — when mentioning a " +
+          "previous video, always use its TITLE, never an internal id or code):\n" +
           `${contextBlock}` +
           keywordsBlock +
           `\n\nSCRIPT:\n${scriptContent}`,

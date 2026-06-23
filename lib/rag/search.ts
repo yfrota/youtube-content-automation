@@ -5,6 +5,11 @@ import { embedText } from "./embeddings";
 export interface RagMatch {
   scriptId: string;
   projectId: string;
+  // The project's title — match_scripts joins projects for this (see
+  // 0007_match_scripts_catalog_titles.sql). Agent prompts must reference
+  // videos by this, never by projectId, or the model echoes a raw uuid
+  // into generated content.
+  title: string;
   content: string;
   hook: string | null;
   chapters: unknown;
@@ -34,6 +39,7 @@ export async function searchCatalog(params: SearchCatalogParams): Promise<RagMat
   return (data ?? []).map((row) => ({
     scriptId: row.id,
     projectId: row.project_id,
+    title: row.title,
     content: row.content,
     hook: row.hook,
     chapters: row.chapters,

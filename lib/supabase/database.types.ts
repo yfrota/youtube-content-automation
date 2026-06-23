@@ -182,6 +182,7 @@ export type Database = {
         Returns: Array<{
           id: string;
           project_id: string;
+          title: string;
           content: string;
           hook: string | null;
           chapters: Json;

@@ -1,18 +1,39 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import type { Language } from "@/lib/agents/types";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const MODEL = "google/gemini-2.5-flash";
+const TOOL_NAME = "extract_keywords";
 const MAX_OUTPUT_TOKENS = 300;
 
-const PROMPTS: Record<"pt-BR" | "en-US", string> = {
-  "pt-BR":
-    "Extraia 10 keywords SEO em português do texto abaixo. " +
-    "Retorne APENAS um JSON array de strings, sem explicação, sem markdown.",
-  "en-US":
-    "Extract 10 SEO keywords in English from the text below. " +
-    "Return ONLY a JSON array of strings, no explanation, no markdown.",
+const PROMPTS: Record<Language, string> = {
+  "pt-BR": "Extraia 10 keywords SEO em português do texto abaixo.",
+  "en-US": "Extract 10 SEO keywords in English from the text below.",
+};
+
+// Same pattern as script-forge.ts/seo-engine.ts: forced tool-use instead of
+// a free-text completion. The model would otherwise routinely wrap JSON in
+// ```json fences (or add stray text) even when told not to, which is what
+// caused intermittent JSON.parse failures here.
+const KEYWORDS_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: TOOL_NAME,
+    description: "Return the SEO keywords extracted from the text.",
+    parameters: {
+      type: "object",
+      properties: {
+        keywords: {
+          type: "array",
+          items: { type: "string" },
+          description: "10 SEO keywords extracted from the text.",
+        },
+      },
+      required: ["keywords"],
+    },
+  },
 };
 
 let openrouter: OpenAI | null = null;
@@ -24,22 +45,8 @@ function getOpenRouter(): OpenAI {
   return openrouter;
 }
 
-// Plain completion, not forced tool-use — this is a one-off extraction, not
-// worth a tool schema. Models routinely wrap JSON in ```json fences even
-// when told not to, so strip those before parsing rather than trust the
-// instruction alone.
-function parseKeywords(raw: string): string[] {
-  const stripped = raw
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-  const parsed = JSON.parse(stripped);
-  if (!Array.isArray(parsed) || !parsed.every((k) => typeof k === "string")) {
-    throw new Error("model did not return a JSON array of strings");
-  }
-  return parsed;
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
 }
 
 // TODO(auth): protect this route once Supabase Auth + tenant membership
@@ -50,7 +57,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const langParam = new URL(request.url).searchParams.get("lang");
-  const lang = langParam === "en-US" ? "en-US" : "pt-BR";
+  const lang: Language = langParam === "en-US" ? "en-US" : "pt-BR";
 
   const supabase = getSupabaseAdmin();
 
@@ -70,6 +77,8 @@ export async function GET(
     const response = await getOpenRouter().chat.completions.create({
       model: MODEL,
       max_tokens: MAX_OUTPUT_TOKENS,
+      tools: [KEYWORDS_TOOL],
+      tool_choice: "required",
       messages: [
         {
           role: "user",
@@ -78,11 +87,23 @@ export async function GET(
       ],
     });
 
-    const raw = response.choices[0]?.message?.content;
-    if (!raw) throw new Error("model returned no content");
+    const toolCall = response.choices[0]?.message?.tool_calls?.[0];
+    if (!toolCall || toolCall.type !== "function" || toolCall.function.name !== TOOL_NAME) {
+      throw new Error("model did not return the expected tool call");
+    }
 
-    const keywords = parseKeywords(raw);
-    return NextResponse.json({ keywords });
+    let parsed: { keywords: unknown };
+    try {
+      parsed = JSON.parse(toolCall.function.arguments);
+    } catch {
+      throw new Error("model returned malformed tool call arguments");
+    }
+
+    if (!isStringArray(parsed.keywords)) {
+      throw new Error("model returned malformed keywords");
+    }
+
+    return NextResponse.json({ keywords: parsed.keywords });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });
