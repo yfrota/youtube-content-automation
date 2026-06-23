@@ -1,40 +1,73 @@
-import OpenAI from "openai";
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const EMBEDDING_MODEL = "text-embedding-004";
+const EMBEDDING_DIMENSIONS = 768; // matches scripts.embedding vector(768)
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const EMBEDDING_DIMENSIONS = 1536; // matches scripts.embedding vector(1536)
-
-let client: OpenAI | null = null;
-
-function getOpenAI(): OpenAI {
-  if (client) return client;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
-  client = new OpenAI({ apiKey });
-  return client;
+interface GeminiEmbedContentResponse {
+  embedding?: { values?: number[] };
 }
 
-// OpenAI rejects empty string input — substitute a single space rather than
-// skip the item, so callers never have to special-case "no embedding".
+interface GeminiBatchEmbedContentsResponse {
+  embeddings?: Array<{ values?: number[] }>;
+}
+
+function requireApiKey(): string {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("Missing GEMINI_API_KEY");
+  return key;
+}
+
+// Gemini rejects empty content — substitute a single space rather than skip
+// the item, so callers never have to special-case "no embedding".
 function sanitize(text: string): string {
   return text.trim().length > 0 ? text : " ";
 }
 
-export async function embedText(text: string): Promise<number[]> {
-  const res = await getOpenAI().embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: sanitize(text),
-    dimensions: EMBEDDING_DIMENSIONS,
+async function geminiFetch<T>(path: string, body: unknown): Promise<T> {
+  const url = `${GEMINI_API_BASE}/${path}?key=${requireApiKey()}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
-  return res.data[0].embedding;
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Gemini API ${path} failed: ${res.status} ${res.statusText} — ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function embedText(text: string): Promise<number[]> {
+  const data = await geminiFetch<GeminiEmbedContentResponse>(
+    `models/${EMBEDDING_MODEL}:embedContent`,
+    {
+      model: `models/${EMBEDDING_MODEL}`,
+      content: { parts: [{ text: sanitize(text) }] },
+      outputDimensionality: EMBEDDING_DIMENSIONS,
+    }
+  );
+  const values = data.embedding?.values;
+  if (!values) throw new Error("Gemini embedText: response had no embedding values");
+  return values;
 }
 
 export async function embedBatch(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const res = await getOpenAI().embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: texts.map(sanitize),
-    dimensions: EMBEDDING_DIMENSIONS,
+  const data = await geminiFetch<GeminiBatchEmbedContentsResponse>(
+    `models/${EMBEDDING_MODEL}:batchEmbedContents`,
+    {
+      requests: texts.map((text) => ({
+        model: `models/${EMBEDDING_MODEL}`,
+        content: { parts: [{ text: sanitize(text) }] },
+        outputDimensionality: EMBEDDING_DIMENSIONS,
+      })),
+    }
+  );
+  const embeddings = data.embeddings;
+  if (!embeddings || embeddings.length !== texts.length) {
+    throw new Error("Gemini embedBatch: response embeddings count did not match input count");
+  }
+  return embeddings.map((e, i) => {
+    if (!e.values) throw new Error(`Gemini embedBatch: missing values at index ${i}`);
+    return e.values;
   });
-  // OpenAI guarantees response order matches input order.
-  return res.data.map((d) => d.embedding);
 }

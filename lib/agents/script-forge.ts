@@ -1,49 +1,56 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { searchCatalog } from "@/lib/rag/search";
 import { embedText } from "@/lib/rag/embeddings";
 import type { ScriptChapter, ScriptForgeInput, ScriptForgeOutput } from "./types";
 
-const MODEL = "claude-sonnet-4-6";
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const MODEL = "google/gemini-flash-1.5";
 const TOOL_NAME = "emit_script";
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
 
-const SCRIPT_TOOL: Anthropic.Tool = {
-  name: TOOL_NAME,
-  description:
-    "Return the finalized YouTube-optimized script, including a hook and chapter markers.",
-  input_schema: {
-    type: "object",
-    properties: {
-      content: { type: "string", description: "Full rewritten script body." },
-      hook: {
-        type: "string",
-        description: "Opening hook line(s), the first 5-15 seconds of the video.",
-      },
-      chapters: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            startTime: { type: "string", description: "Timestamp label, e.g. '00:00'." },
+// OpenRouter mirrors the OpenAI chat-completions API regardless of which
+// underlying model it proxies to, so tools use OpenAI's function-calling
+// shape, not Anthropic's tool_use shape.
+const SCRIPT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: TOOL_NAME,
+    description:
+      "Return the finalized YouTube-optimized script, including a hook and chapter markers.",
+    parameters: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "Full rewritten script body." },
+        hook: {
+          type: "string",
+          description: "Opening hook line(s), the first 5-15 seconds of the video.",
+        },
+        chapters: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              startTime: { type: "string", description: "Timestamp label, e.g. '00:00'." },
+            },
+            required: ["title", "startTime"],
           },
-          required: ["title", "startTime"],
         },
       },
+      required: ["content", "hook", "chapters"],
     },
-    required: ["content", "hook", "chapters"],
   },
 };
 
-let anthropic: Anthropic | null = null;
-function getAnthropic(): Anthropic {
-  if (anthropic) return anthropic;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
-  anthropic = new Anthropic({ apiKey });
-  return anthropic;
+let openrouter: OpenAI | null = null;
+function getOpenRouter(): OpenAI {
+  if (openrouter) return openrouter;
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENROUTER_API_KEY");
+  openrouter = new OpenAI({ baseURL: OPENROUTER_BASE_URL, apiKey });
+  return openrouter;
 }
 
 function isValidChapters(value: unknown): value is ScriptChapter[] {
@@ -75,11 +82,13 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
           .join("\n\n")
       : "No related existing videos were found in the catalog.";
 
-  const response = await getAnthropic().messages.create({
+  const response = await getOpenRouter().chat.completions.create({
     model: MODEL,
-    max_tokens: 4096,
     tools: [SCRIPT_TOOL],
-    tool_choice: { type: "tool", name: TOOL_NAME },
+    // "required" rather than forcing this specific function by name: more
+    // broadly supported across the different models OpenRouter proxies to,
+    // and equivalent here since emit_script is the only tool defined.
+    tool_choice: "required",
     messages: [
       {
         role: "user",
@@ -93,14 +102,18 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
     ],
   });
 
-  const toolUseBlock = response.content.find(
-    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === TOOL_NAME
-  );
-  if (!toolUseBlock) {
+  const toolCall = response.choices[0]?.message?.tool_calls?.[0];
+  if (!toolCall || toolCall.type !== "function" || toolCall.function.name !== TOOL_NAME) {
     throw new Error("Script Forge: model did not return the expected tool call");
   }
 
-  const parsed = toolUseBlock.input as { content: string; hook: string; chapters: unknown };
+  let parsed: { content: string; hook: string; chapters: unknown };
+  try {
+    parsed = JSON.parse(toolCall.function.arguments);
+  } catch {
+    throw new Error("Script Forge: model returned malformed tool call arguments");
+  }
+
   if (!isValidChapters(parsed.chapters)) {
     throw new Error("Script Forge: model returned malformed chapters");
   }
@@ -117,7 +130,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
     content: parsed.content,
     hook: parsed.hook,
     chapters,
-    llm_provider: "anthropic",
+    llm_provider: MODEL,
     status: "draft",
     embedding,
   });

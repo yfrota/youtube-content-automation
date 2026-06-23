@@ -61,7 +61,9 @@ type ScriptsRow = {
   status: ApprovalStatus;
   // pgvector columns come back from PostgREST as their text representation
   // ("[0.1,0.2,...]"), not a native JSON array — only the write path accepts
-  // a plain number[].
+  // a plain number[]. Dimension is 768 (Gemini text-embedding-004) — not
+  // encoded here since TypeScript doesn't enforce array length; the actual
+  // constraint lives in the vector(768) column type (see migration 0003).
   embedding: string | null;
   created_at: string;
   updated_at: string;
