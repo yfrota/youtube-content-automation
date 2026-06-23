@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/dashboard/toast";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ChevronDownIcon, SparklesIcon } from "@/components/icons";
-import type { Platform, ScriptDetail } from "@/lib/dashboard/types";
+import type { Language, Platform, ScriptDetail } from "@/lib/dashboard/types";
 
 function Spinner() {
   return (
@@ -48,6 +48,7 @@ const TRENDING_DEBOUNCE_MS = 500;
 interface ScriptStageProps {
   projectId: string;
   platform: Platform;
+  language: Language;
   script: ScriptDetail | null;
   onScriptChange: (script: ScriptDetail) => void;
   onGeneratingChange?: (generating: boolean) => void;
@@ -56,6 +57,7 @@ interface ScriptStageProps {
 export function ScriptStage({
   projectId,
   platform,
+  language,
   script,
   onScriptChange,
   onGeneratingChange,
@@ -118,7 +120,9 @@ export function ScriptStage({
       setExtractingKeywords(true);
       setExtractError(null);
       try {
-        const res = await fetch(`/api/scripts/${scriptId}/keywords`);
+        const res = await fetch(
+          `/api/scripts/${scriptId}/keywords?lang=${encodeURIComponent(language)}`
+        );
         const body = await res.json();
         if (!res.ok) throw new Error(body?.error ?? "Falha ao extrair keywords");
         if (!cancelled) setExtractedKeywords(body.keywords ?? []);
@@ -151,7 +155,9 @@ export function ScriptStage({
     trendingDebounceRef.current = setTimeout(async () => {
       setTrendingLoading(true);
       try {
-        const res = await fetch(`/api/youtube/trending?q=${encodeURIComponent(trendingQuery)}`);
+        const res = await fetch(
+          `/api/youtube/trending?q=${encodeURIComponent(trendingQuery)}&lang=${encodeURIComponent(language)}`
+        );
         const body = await res.json();
         if (res.ok) setTrendingSuggestions(body.suggestions ?? []);
       } catch {
@@ -163,7 +169,7 @@ export function ScriptStage({
     return () => {
       if (trendingDebounceRef.current) clearTimeout(trendingDebounceRef.current);
     };
-  }, [trendingQuery]);
+  }, [trendingQuery, language]);
 
   const visibleTrendingSuggestions = trendingQuery.trim() ? trendingSuggestions : [];
 

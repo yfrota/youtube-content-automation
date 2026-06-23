@@ -10,12 +10,13 @@ export async function GET(request: Request) {
   if (!q) {
     return NextResponse.json({ error: "q query param is required" }, { status: 400 });
   }
+  const lang = searchParams.get("lang") ?? "pt-BR";
 
   const url = new URL(SUGGEST_BASE_URL);
   url.searchParams.set("client", "youtube");
   url.searchParams.set("ds", "yt");
   url.searchParams.set("q", q);
-  url.searchParams.set("hl", "pt-BR");
+  url.searchParams.set("hl", lang);
 
   try {
     const res = await fetch(url.toString());

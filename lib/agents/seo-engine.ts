@@ -1,12 +1,17 @@
 import OpenAI from "openai";
 import { searchCatalog } from "@/lib/rag/search";
-import type { SeoEngineInput, SeoOutput, SeoTitleOption } from "./types";
+import type { Language, SeoEngineInput, SeoOutput, SeoTitleOption } from "./types";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const MODEL = "google/gemini-2.5-flash";
 const TOOL_NAME = "emit_seo";
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
+
+const LANGUAGE_INSTRUCTIONS: Record<Language, string> = {
+  "pt-BR": "Gere os metadados em português brasileiro.",
+  "en-US": "Generate all metadata in American English.",
+};
 // Same reasoning as script-forge.ts: omitting this lets OpenRouter default
 // to the model's max output (65535 for this one), which 402s if the
 // account's credit balance can't cover it. Load-bearing, don't drop it.
@@ -36,7 +41,7 @@ const SEO_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
         description: {
           type: "string",
           description:
-            "500-800 character YouTube description in Brazilian Portuguese, starting with the hook.",
+            "500-800 character YouTube description, in the language specified in the prompt, starting with the hook.",
         },
         tags: {
           type: "array",
@@ -92,6 +97,7 @@ export async function generateSeo(
     hook,
     chapters,
     keywordsContext,
+    language,
     llmProvider,
   } = input;
   const model = llmProvider ?? MODEL;
@@ -126,7 +132,8 @@ export async function generateSeo(
         role: "user",
         content:
           "You are the SEO Engine, a YouTube SEO specialist. Generate an SEO package " +
-          "(titles, description, tags, hashtags) in Brazilian Portuguese for the video below.\n\n" +
+          "(titles, description, tags, hashtags) for the video below.\n\n" +
+          `${LANGUAGE_INSTRUCTIONS[language]}\n\n` +
           `PROJECT TITLE: ${projectTitle}\n` +
           `HOOK: ${hook}\n` +
           `CHAPTERS:\n${chaptersBlock}\n\n` +

@@ -4,11 +4,17 @@ import type { Platform } from "@/lib/connectors/types";
 // through to the DB row and to RAG search scoping. Agents must never branch
 // on its value; platform-specific formatting belongs in the connector layer.
 
+// Content language, set per-project (see 0006_project_language.sql). Not a
+// Postgres enum — enforced only at the application layer (the new-project
+// form only ever offers these two), so this union is the actual constraint.
+export type Language = "pt-BR" | "en-US";
+
 export interface ScriptForgeInput {
   clientId: string;
   projectId: string;
   platform: Platform;
   rawTranscript: string;
+  language: Language;
 }
 
 // `type`, not `interface` — interfaces don't get an implicit index
@@ -37,6 +43,7 @@ export interface SeoEngineInput {
   hook: string;
   chapters: ScriptChapter[];
   keywordsContext: string[];
+  language: Language;
   // Overrides which OpenRouter model generates this SEO package — the
   // multi-provider selector the README describes, scoped to this one call.
   // Defaults to the module-level MODEL constant in seo-engine.ts if omitted.

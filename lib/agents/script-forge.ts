@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { searchCatalog } from "@/lib/rag/search";
 import { embedText } from "@/lib/rag/embeddings";
-import type { ScriptChapter, ScriptForgeInput, ScriptForgeOutput } from "./types";
+import type { Language, ScriptChapter, ScriptForgeInput, ScriptForgeOutput } from "./types";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 // gemini-flash-1.5 was retired from OpenRouter's catalog ("No endpoints
@@ -17,6 +17,11 @@ const TOOL_NAME = "emit_script";
 const MAX_OUTPUT_TOKENS = 4096;
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
+
+const LANGUAGE_INSTRUCTIONS: Record<Language, string> = {
+  "pt-BR": "Escreva o roteiro em português brasileiro.",
+  "en-US": "Write the script in American English.",
+};
 
 // OpenRouter mirrors the OpenAI chat-completions API regardless of which
 // underlying model it proxies to, so tools use OpenAI's function-calling
@@ -75,7 +80,7 @@ function isValidChapters(value: unknown): value is ScriptChapter[] {
 }
 
 export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptForgeOutput> {
-  const { clientId, projectId, platform, rawTranscript } = input;
+  const { clientId, projectId, platform, rawTranscript, language } = input;
 
   const ragQuery = rawTranscript.slice(0, RAG_QUERY_CHAR_LIMIT);
   const matches = await searchCatalog({ clientId, queryText: ragQuery, platform, matchCount: 5 });
@@ -104,6 +109,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
         content:
           "You are Script Forge, a YouTube script editor. Rewrite the raw transcript below " +
           "into a YouTube-optimized script with a strong opening hook and chapter markers.\n\n" +
+          `${LANGUAGE_INSTRUCTIONS[language]}\n\n` +
           "RELATED EXISTING VIDEOS FROM THIS CHANNEL'S CATALOG (for cross-referencing — mention " +
           `or link to relevant ones in the script body where natural):\n${contextBlock}\n\n` +
           `RAW TRANSCRIPT:\n${rawTranscript}`,

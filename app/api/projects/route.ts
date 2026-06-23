@@ -144,6 +144,8 @@ export async function GET() {
   return NextResponse.json({ projects: result });
 }
 
+const VALID_LANGUAGES = ["pt-BR", "en-US"];
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   // clientId falls back to DEV_CLIENT_ID so callers (e.g. the new-project
@@ -152,6 +154,12 @@ export async function POST(request: Request) {
   if (!clientId || !body?.platform || !body?.title) {
     return NextResponse.json(
       { error: "clientId, platform, and title are required" },
+      { status: 400 }
+    );
+  }
+  if (body?.language !== undefined && !VALID_LANGUAGES.includes(body.language)) {
+    return NextResponse.json(
+      { error: `language must be one of: ${VALID_LANGUAGES.join(", ")}` },
       { status: 400 }
     );
   }
@@ -165,6 +173,7 @@ export async function POST(request: Request) {
       title: body.title,
       external_channel_id: body.externalChannelId ?? null,
       external_video_id: body.externalVideoId ?? null,
+      ...(body.language !== undefined ? { language: body.language } : {}),
     })
     .select()
     .single();

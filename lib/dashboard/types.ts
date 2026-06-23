@@ -10,6 +10,10 @@ export type ApprovalStatus =
 
 export type Platform = "youtube" | "instagram" | "facebook" | "linkedin";
 
+// Content language, set per-project (see 0006_project_language.sql) — not a
+// Postgres enum, the new-project form is the actual constraint.
+export type Language = "pt-BR" | "en-US";
+
 export type ModuleKey = "script" | "seo" | "thumbnail" | "checklist";
 
 export interface PipelineModule {
@@ -74,6 +78,7 @@ export interface ProjectDetail {
   id: string;
   title: string;
   platform: Platform;
+  language: Language;
   status: ApprovalStatus;
   createdAt: string;
   updatedAt: string;

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { runScriptForge } from "@/lib/agents/script-forge";
 
 // TODO(auth): replace with the authenticated user's client_id once Supabase
@@ -20,8 +21,24 @@ export async function POST(request: Request) {
     );
   }
 
+  // Read language from the project row rather than trust the client — it's
+  // a per-project setting, not something each call should be able to
+  // override, and the DB column is the single source of truth for it.
+  const supabase = getSupabaseAdmin();
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select("language")
+    .eq("id", body.projectId)
+    .maybeSingle();
+  if (projectError) {
+    return NextResponse.json({ error: projectError.message }, { status: 500 });
+  }
+  if (!project) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+
   try {
-    const result = await runScriptForge({ ...body, clientId });
+    const result = await runScriptForge({ ...body, clientId, language: project.language });
     return NextResponse.json({ script: result }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

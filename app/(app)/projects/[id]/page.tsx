@@ -156,6 +156,7 @@ export default function ProjectDetailPage() {
           <ScriptStage
             projectId={project.id}
             platform={project.platform}
+            language={project.language}
             script={project.script}
             onScriptChange={handleScriptChange}
             onGeneratingChange={setGeneratingScript}
@@ -173,6 +174,7 @@ export default function ProjectDetailPage() {
             <SeoStage
               projectId={project.id}
               scriptId={project.script.id}
+              language={project.language}
               keywordsContext={project.script.keywordsContext}
               seo={project.seo}
               onSeoChange={handleSeoChange}

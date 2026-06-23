@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useToast } from "@/components/dashboard/toast";
-import type { SeoData } from "@/lib/dashboard/types";
+import type { Language, SeoData } from "@/lib/dashboard/types";
 
 function Spinner() {
   return (
@@ -26,12 +26,20 @@ function ctrBadgeStyle(score: number): string {
 interface SeoStageProps {
   projectId: string;
   scriptId: string;
+  language: Language;
   keywordsContext: string[] | null;
   seo: SeoData | null;
   onSeoChange: (seo: SeoData) => void;
 }
 
-export function SeoStage({ projectId, scriptId, keywordsContext, seo, onSeoChange }: SeoStageProps) {
+export function SeoStage({
+  projectId,
+  scriptId,
+  language,
+  keywordsContext,
+  seo,
+  onSeoChange,
+}: SeoStageProps) {
   const { showToast } = useToast();
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -51,7 +59,10 @@ export function SeoStage({ projectId, scriptId, keywordsContext, seo, onSeoChang
       const res = await fetch("/api/agents/seo-engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, scriptId }),
+        // language is also resolved authoritatively from the project row
+        // server-side (see app/api/agents/seo-engine/route.ts) — sent here
+        // too only for symmetry with ScriptStage's calls, not load-bearing.
+        body: JSON.stringify({ projectId, scriptId, language }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error ?? "Falha ao gerar SEO");

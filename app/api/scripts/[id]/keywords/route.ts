@@ -6,6 +6,15 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const MODEL = "google/gemini-2.5-flash";
 const MAX_OUTPUT_TOKENS = 300;
 
+const PROMPTS: Record<"pt-BR" | "en-US", string> = {
+  "pt-BR":
+    "Extraia 10 keywords SEO em português do texto abaixo. " +
+    "Retorne APENAS um JSON array de strings, sem explicação, sem markdown.",
+  "en-US":
+    "Extract 10 SEO keywords in English from the text below. " +
+    "Return ONLY a JSON array of strings, no explanation, no markdown.",
+};
+
 let openrouter: OpenAI | null = null;
 function getOpenRouter(): OpenAI {
   if (openrouter) return openrouter;
@@ -36,10 +45,13 @@ function parseKeywords(raw: string): string[] {
 // TODO(auth): protect this route once Supabase Auth + tenant membership
 // exists (see docs/rls-policies.md).
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const langParam = new URL(request.url).searchParams.get("lang");
+  const lang = langParam === "en-US" ? "en-US" : "pt-BR";
+
   const supabase = getSupabaseAdmin();
 
   const { data: script, error: scriptError } = await supabase
@@ -61,10 +73,7 @@ export async function GET(
       messages: [
         {
           role: "user",
-          content:
-            "Extraia 10 keywords SEO em português do texto abaixo. " +
-            "Retorne APENAS um JSON array de strings, sem explicação, sem markdown.\n\n" +
-            script.content,
+          content: `${PROMPTS[lang]}\n\n${script.content}`,
         },
       ],
     });

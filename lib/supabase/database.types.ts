@@ -10,6 +10,11 @@
 
 export type PlatformType = "youtube" | "instagram" | "facebook" | "linkedin";
 
+// Content language (0006_project_language.sql) — unlike PlatformType, this
+// is a plain `text` column, not a Postgres enum; this union is the only
+// enforcement (the new-project form is the real constraint).
+export type LanguageType = "pt-BR" | "en-US";
+
 export type ApprovalStatus =
   | "draft"
   | "kelly_review"
@@ -42,6 +47,7 @@ type ProjectsRow = {
   title: string;
   external_channel_id: string | null;
   external_video_id: string | null;
+  language: LanguageType;
   status: ApprovalStatus;
   created_at: string;
   updated_at: string;

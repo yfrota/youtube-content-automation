@@ -28,6 +28,7 @@ export default function NewProjectPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [channelUrl, setChannelUrl] = useState("");
+  const [language, setLanguage] = useState<"pt-BR" | "en-US">("pt-BR");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +46,7 @@ export default function NewProjectPage() {
           platform: "youtube",
           title,
           externalChannelId: channelUrl.trim() || undefined,
+          language,
         }),
       });
       const body = await res.json();
@@ -111,6 +113,20 @@ export default function NewProjectPage() {
               placeholder="https://www.youtube.com/@seucanal"
               className="h-11 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
             />
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              Idioma do conteúdo
+            </span>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as "pt-BR" | "en-US")}
+              className="h-11 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 focus:border-accent dark:border-gray-700"
+            >
+              <option value="pt-BR">Português (Brasil)</option>
+              <option value="en-US">English (US)</option>
+            </select>
           </label>
         </div>
 

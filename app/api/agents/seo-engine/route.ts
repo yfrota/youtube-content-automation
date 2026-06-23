@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
   const { data: project, error: projectError } = await supabase
     .from("projects")
-    .select("title, platform")
+    .select("title, platform, language")
     .eq("id", body.projectId)
     .maybeSingle();
   if (projectError) {
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
       hook: script.hook ?? "",
       chapters: (script.chapters as { title: string; startTime: string }[] | null) ?? [],
       keywordsContext,
+      language: project.language,
       llmProvider: body.llmProvider,
     });
 
