@@ -131,21 +131,27 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
   const embedding = await embedText(`${parsed.hook}\n\n${parsed.content}`);
 
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("scripts").insert({
-    client_id: clientId,
-    project_id: projectId,
-    platform,
-    raw_transcript: rawTranscript,
-    content: parsed.content,
-    hook: parsed.hook,
-    chapters,
-    llm_provider: MODEL,
-    status: "draft",
-    embedding,
-  });
+  const { data: inserted, error } = await supabase
+    .from("scripts")
+    .insert({
+      client_id: clientId,
+      project_id: projectId,
+      platform,
+      raw_transcript: rawTranscript,
+      content: parsed.content,
+      hook: parsed.hook,
+      chapters,
+      llm_provider: MODEL,
+      status: "draft",
+      embedding,
+    })
+    .select("id")
+    .single();
   if (error) throw new Error(`Script Forge: failed to save script: ${error.message}`);
 
   return {
+    id: inserted.id,
+    status: "draft",
     content: parsed.content,
     hook: parsed.hook,
     chapters,

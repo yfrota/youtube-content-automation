@@ -26,6 +26,36 @@ export interface Project {
   modules: PipelineModule[];
 }
 
+export interface ScriptChapter {
+  title: string;
+  startTime: string;
+}
+
+export interface ScriptDetail {
+  id: string;
+  content: string;
+  hook: string | null;
+  chapters: ScriptChapter[];
+  status: ApprovalStatus;
+  createdAt: string;
+}
+
+// Shape returned by GET /api/projects/[id] — one project's full pipeline
+// state. `seoStatus`/`thumbnailStatus` are null when no row exists yet
+// (stage not started); `status` is the project's own column, reused as the
+// checklist stage per the mapping note in CLAUDE.md.
+export interface ProjectDetail {
+  id: string;
+  title: string;
+  platform: Platform;
+  status: ApprovalStatus;
+  createdAt: string;
+  updatedAt: string;
+  script: ScriptDetail | null;
+  seoStatus: ApprovalStatus | null;
+  thumbnailStatus: ApprovalStatus | null;
+}
+
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   script: "Roteiro",
   seo: "SEO",

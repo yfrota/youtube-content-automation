@@ -19,6 +19,8 @@ export type ScriptChapter = {
 };
 
 export interface ScriptForgeOutput {
+  id: string;
+  status: "draft";
   content: string;
   hook: string;
   chapters: ScriptChapter[];
