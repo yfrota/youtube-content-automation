@@ -65,10 +65,16 @@ type ScriptsRow = {
   // encoded here since TypeScript doesn't enforce array length; the actual
   // constraint lives in the vector(768) column type (see migration 0003).
   embedding: string | null;
+  // Keyword-research selections (extracted + trending + manual), passed to
+  // the SEO Engine prompt. Added in 0005 — null until "Salvar keywords" or
+  // "Aprovar roteiro" persists a selection.
+  keywords_context: Json | null;
   created_at: string;
   updated_at: string;
 };
 
+// title_options/keywords are the original 0001 columns, unused by the SEO
+// Engine (titles/tags below, added in 0005) — left in place, not dropped.
 type SeoRow = {
   id: string;
   client_id: string;
@@ -78,6 +84,10 @@ type SeoRow = {
   title_options: Json;
   description: string | null;
   keywords: Json;
+  titles: Json;
+  tags: Json;
+  hashtags: Json;
+  selected_title: string | null;
   llm_provider: string | null;
   status: ApprovalStatus;
   created_at: string;

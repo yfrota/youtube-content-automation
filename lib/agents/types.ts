@@ -26,3 +26,34 @@ export interface ScriptForgeOutput {
   chapters: ScriptChapter[];
   crossReferencedProjectIds: string[];
 }
+
+export interface SeoEngineInput {
+  clientId: string;
+  projectId: string;
+  scriptId: string;
+  platform: Platform;
+  projectTitle: string;
+  scriptContent: string;
+  hook: string;
+  chapters: ScriptChapter[];
+  keywordsContext: string[];
+  // Overrides which OpenRouter model generates this SEO package — the
+  // multi-provider selector the README describes, scoped to this one call.
+  // Defaults to the module-level MODEL constant in seo-engine.ts if omitted.
+  llmProvider?: string;
+}
+
+// `type`, not `interface` — same jsonb-structural-typing reason as
+// ScriptChapter above (round-trips through the seo.titles column).
+export type SeoTitleOption = {
+  text: string;
+  ctrScore: number;
+  reasoning: string;
+};
+
+export interface SeoOutput {
+  titles: SeoTitleOption[];
+  description: string;
+  tags: string[];
+  hashtags: string[];
+}

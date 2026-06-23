@@ -8,10 +8,15 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { PlayCircleIcon } from "@/components/icons";
 import { PipelineStage, type StageState } from "@/components/project-detail/PipelineStage";
 import { ScriptStage } from "@/components/project-detail/ScriptStage";
+import { SeoStage } from "@/components/project-detail/SeoStage";
 import { LockedStageContent } from "@/components/project-detail/LockedStageContent";
-import { useToast } from "@/components/dashboard/toast";
 import { relativeTime } from "@/lib/time";
-import type { ApprovalStatus, ProjectDetail, ScriptDetail } from "@/lib/dashboard/types";
+import type {
+  ApprovalStatus,
+  ProjectDetail,
+  ScriptDetail,
+  SeoData,
+} from "@/lib/dashboard/types";
 
 // Stage 1 stays expanded while still being worked on (draft) or sitting in
 // internal review (kelly_review); anything past that collapses to a summary
@@ -27,7 +32,6 @@ function nextStageState(unlocked: boolean, status: ApprovalStatus): StageState {
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
-  const { showToast } = useToast();
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generatingScript, setGeneratingScript] = useState(false);
@@ -57,8 +61,8 @@ export default function ProjectDetailPage() {
     setProject((prev) => (prev ? { ...prev, script } : prev));
   }
 
-  function handlePlaceholderClick() {
-    showToast("Disponível em uma próxima etapa", "info");
+  function handleSeoChange(seo: SeoData) {
+    setProject((prev) => (prev ? { ...prev, seo, seoStatus: seo.status } : prev));
   }
 
   if (error) {
@@ -163,16 +167,16 @@ export default function ProjectDetailPage() {
           title="SEO"
           state={nextStageState(seoUnlocked, seoStatus)}
         >
-          {!seoUnlocked ? (
+          {!seoUnlocked || !project.script ? (
             <LockedStageContent message="Disponível após aprovar o roteiro" />
           ) : (
-            <button
-              type="button"
-              onClick={handlePlaceholderClick}
-              className="inline-flex h-10 items-center rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover"
-            >
-              Gerar SEO
-            </button>
+            <SeoStage
+              projectId={project.id}
+              scriptId={project.script.id}
+              keywordsContext={project.script.keywordsContext}
+              seo={project.seo}
+              onSeoChange={handleSeoChange}
+            />
           )}
         </PipelineStage>
 

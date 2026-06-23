@@ -33,12 +33,38 @@ export interface ScriptChapter {
 
 export interface ScriptDetail {
   id: string;
+  rawTranscript: string | null;
   content: string;
   hook: string | null;
   chapters: ScriptChapter[];
+  // Keyword-research selections (extracted from the script + YouTube
+  // trending + manual additions). Null until "Salvar keywords" or "Aprovar
+  // roteiro" persists a selection — see PATCH /api/scripts/[id].
+  keywordsContext: string[] | null;
   status: ApprovalStatus;
   createdAt: string;
 }
+
+// One title option from the SEO Engine, with the model's own CTR estimate
+// and reasoning — `type`, not `interface`, per CLAUDE.md's structural-typing
+// gotcha (this shape round-trips through the `seo.titles` jsonb column).
+export type SeoTitleOption = {
+  text: string;
+  ctrScore: number;
+  reasoning: string;
+};
+
+export type SeoData = {
+  id: string;
+  status: ApprovalStatus;
+  titles: SeoTitleOption[];
+  description: string | null;
+  tags: string[];
+  hashtags: string[];
+  selectedTitle: string | null;
+  llmProvider: string | null;
+  createdAt: string;
+};
 
 // Shape returned by GET /api/projects/[id] — one project's full pipeline
 // state. `seoStatus`/`thumbnailStatus` are null when no row exists yet
@@ -52,6 +78,7 @@ export interface ProjectDetail {
   createdAt: string;
   updatedAt: string;
   script: ScriptDetail | null;
+  seo: SeoData | null;
   seoStatus: ApprovalStatus | null;
   thumbnailStatus: ApprovalStatus | null;
 }

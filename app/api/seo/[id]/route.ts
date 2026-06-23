@@ -27,39 +27,30 @@ export async function PATCH(
     );
   }
 
-  const keywordsContext = body?.keywordsContext as unknown;
-  if (
-    keywordsContext !== undefined &&
-    (!Array.isArray(keywordsContext) || !keywordsContext.every((k) => typeof k === "string"))
-  ) {
-    return NextResponse.json(
-      { error: "keywordsContext must be an array of strings" },
-      { status: 400 }
-    );
+  const selectedTitle = body?.selectedTitle as unknown;
+  if (selectedTitle !== undefined && typeof selectedTitle !== "string") {
+    return NextResponse.json({ error: "selectedTitle must be a string" }, { status: 400 });
   }
 
-  // Both fields are optional independently — "Salvar keywords" patches only
-  // keywords_context (status unchanged); "Aprovar roteiro" patches both at
-  // once; "Desfazer aprovação" patches only status back to draft.
-  const update: { status?: ApprovalStatus; keywords_context?: string[] } = {};
+  const update: { status?: ApprovalStatus; selected_title?: string } = {};
   if (status !== undefined) update.status = status;
-  if (keywordsContext !== undefined) update.keywords_context = keywordsContext as string[];
+  if (selectedTitle !== undefined) update.selected_title = selectedTitle;
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json(
-      { error: "at least one of status or keywordsContext is required" },
+      { error: "at least one of status or selectedTitle is required" },
       { status: 400 }
     );
   }
 
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
-    .from("scripts")
+    .from("seo")
     .update(update)
     .eq("id", id)
-    .select("id, status, keywords_context")
+    .select()
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ script: data });
+  return NextResponse.json({ seo: data });
 }

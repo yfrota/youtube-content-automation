@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import type { ProjectDetail, ScriptChapter } from "@/lib/dashboard/types";
+import type { ProjectDetail, ScriptChapter, SeoTitleOption } from "@/lib/dashboard/types";
 
 // TODO(auth): replace with the authenticated user's client_id once Supabase
 // Auth + tenant membership exists (see docs/rls-policies.md).
@@ -35,7 +35,7 @@ export async function GET(
   // is null) are a different concept, see lib/rag/indexer.ts.
   const { data: scripts, error: scriptsError } = await supabase
     .from("scripts")
-    .select("id, content, hook, chapters, status, version, created_at")
+    .select("id, raw_transcript, content, hook, chapters, keywords_context, status, version, created_at")
     .eq("project_id", id)
     .not("raw_transcript", "is", null)
     .order("version", { ascending: false })
@@ -47,7 +47,9 @@ export async function GET(
 
   const { data: seoRows, error: seoError } = await supabase
     .from("seo")
-    .select("status, created_at")
+    .select(
+      "id, titles, description, tags, hashtags, selected_title, llm_provider, status, created_at"
+    )
     .eq("project_id", id)
     .order("created_at", { ascending: false })
     .limit(1);
@@ -66,6 +68,7 @@ export async function GET(
   }
 
   const latestScript = scripts?.[0] ?? null;
+  const latestSeo = seoRows?.[0] ?? null;
 
   const result: ProjectDetail = {
     id: project.id,
@@ -77,14 +80,30 @@ export async function GET(
     script: latestScript
       ? {
           id: latestScript.id,
+          rawTranscript: latestScript.raw_transcript,
           content: latestScript.content,
           hook: latestScript.hook,
           chapters: (latestScript.chapters as unknown as ScriptChapter[] | null) ?? [],
+          keywordsContext:
+            (latestScript.keywords_context as unknown as string[] | null) ?? null,
           status: latestScript.status,
           createdAt: latestScript.created_at,
         }
       : null,
-    seoStatus: seoRows?.[0]?.status ?? null,
+    seo: latestSeo
+      ? {
+          id: latestSeo.id,
+          status: latestSeo.status,
+          titles: (latestSeo.titles as unknown as SeoTitleOption[] | null) ?? [],
+          description: latestSeo.description,
+          tags: (latestSeo.tags as unknown as string[] | null) ?? [],
+          hashtags: (latestSeo.hashtags as unknown as string[] | null) ?? [],
+          selectedTitle: latestSeo.selected_title,
+          llmProvider: latestSeo.llm_provider,
+          createdAt: latestSeo.created_at,
+        }
+      : null,
+    seoStatus: latestSeo?.status ?? null,
     thumbnailStatus: thumbnailRows?.[0]?.status ?? null,
   };
 
