@@ -58,7 +58,7 @@ See `.env.example` — `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, 
 
 ## Not built yet (from README's status table + follow-ups flagged during implementation)
 
-- Auth (2-level: admin + client approver) and the tenant-membership model that RLS policies depend on — this is the actual blocker for enabling RLS policies and for protecting the API routes.
+- Auth (2-level: admin + client approver) and the tenant-membership model that RLS policies depend on — this is the actual blocker for enabling RLS policies and for protecting the API routes. The full design (`client_members` table, `is_client_admin()` helper, per-table policies, and why the client-review flow is recommended to stay server-mediated via tokenized links rather than RLS) is already written up in `docs/rls-policies.md`, including ready-to-apply SQL — implement Fase A by following that doc, don't redesign from scratch.
 - Dashboard UI (`app/dashboard/`, `app/projects/` are still empty).
 - SEO Engine, Thumbnail Studio, Post-Production Assistant, Publish Checklist agents.
 - Multi-provider LLM selector (today Script Forge is hardcoded to Anthropic).
