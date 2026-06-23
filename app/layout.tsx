@@ -8,8 +8,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "YouTube Content Automation",
+  title: "Halo Studio",
   description: "Painel de automação de conteúdo para YouTube",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

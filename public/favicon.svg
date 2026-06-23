@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <radialGradient id="p0" cx="0" cy="0" r="45" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#FFB3B3"/>
+    </radialGradient>
+    <radialGradient id="p1" cx="0" cy="0" r="45" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#FBBFD4"/>
+    </radialGradient>
+    <radialGradient id="p2" cx="0" cy="0" r="45" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#A8CAFF"/>
+    </radialGradient>
+    <radialGradient id="p3" cx="0" cy="0" r="45" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#A8EEC1"/>
+    </radialGradient>
+    <radialGradient id="p4" cx="0" cy="0" r="45" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#C4B5FD"/>
+    </radialGradient>
+  </defs>
+  <g transform="translate(50,50)">
+    <g transform="rotate(-90)"><ellipse cx="21" cy="0" rx="23" ry="11" fill="url(#p0)"/></g>
+    <g transform="rotate(-18)"><ellipse cx="21" cy="0" rx="23" ry="11" fill="url(#p1)"/></g>
+    <g transform="rotate(54)"><ellipse cx="21" cy="0" rx="23" ry="11" fill="url(#p2)"/></g>
+    <g transform="rotate(126)"><ellipse cx="21" cy="0" rx="23" ry="11" fill="url(#p3)"/></g>
+    <g transform="rotate(198)"><ellipse cx="21" cy="0" rx="23" ry="11" fill="url(#p4)"/></g>
+    <circle r="20" fill="#ffffff"/>
+  </g>
+</svg>

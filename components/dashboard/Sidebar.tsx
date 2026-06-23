@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MenuIcon, SparklesIcon } from "@/components/icons";
+import { HaloMark } from "@/components/logo";
 import { NAV_ITEMS } from "./navItems";
 
 export function Sidebar() {
@@ -16,23 +16,24 @@ export function Sidebar() {
         expanded ? "w-60" : "w-16"
       }`}
     >
-      {/* Brand + collapse toggle */}
-      <div className="flex h-16 items-center gap-3 px-3">
+      {/* Brand mark doubles as the expand/collapse toggle — symbol always
+          visible, wordmark fades in only when expanded. */}
+      <div className="flex h-16 items-center gap-2 px-3">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-label={expanded ? "Recolher menu" : "Expandir menu"}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors duration-200 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800/70"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/70"
         >
-          <MenuIcon className="h-5 w-5" />
+          <HaloMark className="h-9 w-9" />
         </button>
         <span
-          className={`flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-sm font-medium text-foreground transition-opacity duration-200 ${
+          className={`overflow-hidden whitespace-nowrap text-sm font-extralight text-foreground transition-opacity duration-200 ${
             expanded ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
+          style={{ letterSpacing: "4px" }}
         >
-          <SparklesIcon className="h-4 w-4 text-accent" />
-          Content Studio
+          Halo Studio
         </span>
       </div>
 

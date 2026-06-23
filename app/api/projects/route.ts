@@ -146,7 +146,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
-  if (!body?.clientId || !body?.platform || !body?.title) {
+  // clientId falls back to DEV_CLIENT_ID so callers (e.g. the new-project
+  // form, a client component) never need that env var sent to the browser.
+  const clientId = body?.clientId ?? DEV_CLIENT_ID;
+  if (!clientId || !body?.platform || !body?.title) {
     return NextResponse.json(
       { error: "clientId, platform, and title are required" },
       { status: 400 }
@@ -157,7 +160,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from("projects")
     .insert({
-      client_id: body.clientId,
+      client_id: clientId,
       platform: body.platform,
       title: body.title,
       external_channel_id: body.externalChannelId ?? null,

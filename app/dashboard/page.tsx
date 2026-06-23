@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PlusIcon } from "@/components/icons";
 import { Breadcrumb } from "@/components/dashboard/Breadcrumb";
 import { ProjectCard } from "@/components/dashboard/ProjectCard";
@@ -9,36 +10,11 @@ import { EmptyState } from "@/components/dashboard/EmptyState";
 import { useToast } from "@/components/dashboard/toast";
 import type { Project } from "@/lib/dashboard/types";
 
-function Spinner() {
-  return (
-    <svg
-      className="h-4 w-4 animate-spin"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="9"
-        stroke="currentColor"
-        strokeWidth="3"
-      />
-      <path
-        className="opacity-90"
-        fill="currentColor"
-        d="M12 3a9 9 0 0 1 9 9h-3a6 6 0 0 0-6-6V3Z"
-      />
-    </svg>
-  );
-}
-
 export default function DashboardPage() {
+  const router = useRouter();
   const { showToast } = useToast();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,12 +38,7 @@ export default function DashboardPage() {
   }, [showToast]);
 
   function handleCreate() {
-    if (creating) return;
-    setCreating(true);
-    setTimeout(() => {
-      setCreating(false);
-      showToast("Em breve: criação de projetos", "info");
-    }, 900);
+    router.push("/projects/new");
   }
 
   const loading = projects === null && error === null;
@@ -91,7 +62,7 @@ export default function DashboardPage() {
           onClick={handleCreate}
           className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover"
         >
-          {creating ? <Spinner /> : <PlusIcon className="h-4 w-4" />}
+          <PlusIcon className="h-4 w-4" />
           Novo projeto
         </button>
       </header>
