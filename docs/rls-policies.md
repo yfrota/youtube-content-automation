@@ -7,7 +7,6 @@ RLS está habilitado em todas as 6 tabelas (`clients`, `projects`, `scripts`, `s
 **Não existe "policy para `service_role`" a ser criada** — e isso não é uma lacuna, é como o Postgres/Supabase funciona por design:
 
 - Todo projeto Supabase provisiona o role `service_role` com o atributo `BYPASSRLS`. Um role com `BYPASSRLS` **pula a avaliação de RLS inteiramente**, antes mesmo de chegar a verificar se existem policies. Não é "uma policy permissiva" — é a ausência total de checagem.
-- Por isso, `lib/supabase/admin.ts` (que autentica com `SUPABASE_SERVICE_ROLE_KEY`) já lê/escreve normalmente nas 6 tabelas hoje, e as 3 rotas de API atuais (`/api/projects`, `/api/connectors/youtube/index`, `/api/agents/script-forge`) já funcionam sem nenhuma mudança necessária.
 - Se quiser confirmar isso diretamente no seu projeto, rode no SQL Editor:
   ```sql
   select rolname, rolbypassrls from pg_roles where rolname = 'service_role';
@@ -16,7 +15,9 @@ RLS está habilitado em todas as 6 tabelas (`clients`, `projects`, `scripts`, `s
 
 **O lado `anon`/`authenticated` (chave pública, usada pelo browser) está hoje 100% bloqueado em todas as tabelas** — RLS habilitado + zero policies = deny-by-default para qualquer role que não seja `service_role`. Isso é seguro e intencional: nenhum Client Component do app fala com o Supabase diretamente ainda, então não há nada hoje que dependa de acesso via `anon`/`authenticated`.
 
-**Resumo**: nada precisa ser aplicado agora. O banco já está seguro e o app já funciona.
+**Correção (achado na verificação de ponta a ponta):** a afirmação original aqui era de que `lib/supabase/admin.ts` "já funciona, sem nada a aplicar" só por causa do `BYPASSRLS` — isso estava **incompleto**. `BYPASSRLS` pula só a camada de *row-level* security; o role ainda precisa dos `GRANT`s básicos do Postgres (`SELECT`/`INSERT`/`UPDATE`/`DELETE` na tabela) para tocar nela, e nenhuma das migrations `0001`–`0003` concedeu isso. Rodando a app de verdade contra o banco real, toda rota retornava "permission denied for table X". Corrigido em `0004_grant_service_role_privileges.sql` (ver `CLAUDE.md`). Lição: RLS e `GRANT` são duas camadas independentes — `BYPASSRLS` não implica a outra.
+
+**Resumo atualizado**: com `0004` aplicada, `service_role` funciona de fato (não só na teoria do `BYPASSRLS`). `anon`/`authenticated` continuam 100% bloqueados, como pretendido.
 
 ## 2. O que precisará ser criado na Fase A (auth)
 
