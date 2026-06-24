@@ -173,18 +173,18 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   tiktok: "TikTok",
 };
 
-// Brand colors, used verbatim (not the app's muted palette) so the platform
-// badge reads as "this is YouTube/Instagram/etc" at a glance. Selectable in
-// the new-project form's picker as of 0009, but spotify/tiktok still have no
-// connector or agent behind them — same gap instagram/facebook/linkedin have
-// had since 0001.
+// Pastel tints of each platform's brand color (not the app's muted palette
+// either) — enough to read as "this is YouTube/Instagram/etc" at a glance
+// without a loud solid-color chip. Selectable in the new-project form's
+// picker as of 0009, but spotify/tiktok still have no connector or agent
+// behind them — same gap instagram/facebook/linkedin have had since 0001.
 export const PLATFORM_BADGE_STYLES: Record<Platform, { background: string; color: string }> = {
-  youtube: { background: "#FF0000", color: "#ffffff" },
-  instagram: { background: "linear-gradient(45deg, #833AB4, #FD1D1D)", color: "#ffffff" },
-  linkedin: { background: "#0A66C2", color: "#ffffff" },
-  facebook: { background: "#1877F2", color: "#ffffff" },
-  spotify: { background: "#1DB954", color: "#ffffff" },
-  tiktok: { background: "#000000", color: "#ffffff" },
+  youtube: { background: "#FFE5E5", color: "#CC0000" },
+  instagram: { background: "#F3E5FF", color: "#6B21A8" },
+  linkedin: { background: "#E5F0FF", color: "#0A4FA8" },
+  facebook: { background: "#E8F0FF", color: "#1877F2" },
+  spotify: { background: "#E5F7ED", color: "#1A7A3F" },
+  tiktok: { background: "#F0F0F0", color: "#000000" },
 };
 
 export const PRIORITY_LABELS: Record<Priority, string> = {
@@ -194,12 +194,25 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
   urgent: "Urgente",
 };
 
-// "normal" intentionally has no entry — it's the common case and gets no
-// badge at all, only low/high/urgent stand out on the card.
+// "normal" intentionally has no entry — it's the common case and gets
+// neither this text treatment nor a left border on the card (see
+// PRIORITY_BORDER_COLORS below). Text-only now, no background pill — the
+// left border carries the emphasis instead.
 export const PRIORITY_BADGE_STYLES: Partial<Record<Priority, string>> = {
-  urgent: "bg-red-500 text-white",
-  high: "bg-orange-500 text-white",
-  low: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
+  urgent: "text-red-600 dark:text-red-400",
+  high: "text-orange-600 dark:text-orange-400",
+  low: "text-gray-400 dark:text-gray-500",
+};
+
+// Hex (not Tailwind classes) because this drives an inline `border-left`
+// style on the whole card — ProjectCard already uses inline `style` for
+// PLATFORM_BADGE_STYLES for the same reason (precise colors outside the
+// theme), and inline beats `dark:border-gray-800` on the card's own border
+// class, so the priority color reads the same in both color schemes.
+export const PRIORITY_BORDER_COLORS: Partial<Record<Priority, string>> = {
+  urgent: "#DC2626",
+  high: "#EA580C",
+  low: "#9CA3AF",
 };
 
 // Stages count as "done" for progress purposes once approved or published.

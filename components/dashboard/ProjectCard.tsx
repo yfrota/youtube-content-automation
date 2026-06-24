@@ -8,6 +8,7 @@ import {
   PLATFORM_BADGE_STYLES,
   PLATFORM_LABELS,
   PRIORITY_BADGE_STYLES,
+  PRIORITY_BORDER_COLORS,
   PRIORITY_LABELS,
   projectProgress,
   type Project,
@@ -56,6 +57,7 @@ export function ProjectCard({
   const progress = projectProgress(project);
   const platformStyle = PLATFORM_BADGE_STYLES[project.platform];
   const priorityBadgeStyle = PRIORITY_BADGE_STYLES[project.priority];
+  const priorityBorderColor = PRIORITY_BORDER_COLORS[project.priority];
   const urgency = project.deadline ? deadlineUrgency(project.deadline) : null;
 
   return (
@@ -67,7 +69,14 @@ export function ProjectCard({
     // triggers the card's own navigation.
     <div
       onClick={() => router.push(`/projects/${project.id}`)}
-      className="group relative cursor-pointer rounded-xl border border-gray-200 bg-background p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:border-gray-800 dark:hover:border-gray-700"
+      style={
+        priorityBorderColor
+          ? { borderLeftWidth: "3px", borderLeftColor: priorityBorderColor }
+          : undefined
+      }
+      className={`group relative cursor-pointer rounded-xl border border-gray-200 bg-background p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:border-gray-800 dark:hover:border-gray-700 ${
+        priorityBorderColor ? "border-l-[3px]" : ""
+      }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -86,9 +95,7 @@ export function ProjectCard({
 
         <div className="flex shrink-0 items-center gap-1.5">
           {priorityBadgeStyle && (
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${priorityBadgeStyle}`}
-            >
+            <span className={`text-[10px] font-medium uppercase tracking-wide ${priorityBadgeStyle}`}>
               {PRIORITY_LABELS[project.priority]}
             </span>
           )}
