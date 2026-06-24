@@ -68,6 +68,10 @@ type ProjectsRow = {
   priority: string | null;
   deadline: string | null;
   tags: Json | null;
+  // Added in 0010 — same bare-string precedent as `priority` above (not a
+  // dedicated union here; lib/dashboard/types.ts's ContentType is where the
+  // real constraint lives, same split as Priority/Platform).
+  content_type: string;
   created_at: string;
   updated_at: string;
 };
@@ -94,6 +98,15 @@ type ScriptsRow = {
   // the SEO Engine prompt. Added in 0005 — null until "Salvar keywords" or
   // "Aprovar roteiro" persists a selection.
   keywords_context: Json | null;
+  // Added in 0010 — content_type records what type this specific script was
+  // generated under (denormalized from projects.content_type at generation
+  // time, same denormalization precedent as client_id/platform across this
+  // schema). clip_script/cta_line/pod_description are podcast_vodcast-only
+  // deliverables, null otherwise.
+  content_type: string;
+  clip_script: string | null;
+  cta_line: string | null;
+  pod_description: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -16,6 +16,13 @@ export type Platform = "youtube" | "instagram" | "facebook" | "linkedin" | "spot
 // Postgres enum, the new-project form is the actual constraint.
 export type Language = "pt-BR" | "en-US";
 
+// Content type, set per-project (see 0010_content_type_and_deliverables.sql)
+// — drives which Script Forge prompt/structure is used. Not a Postgres
+// enum, same precedent as Language/Priority. Also duplicated in
+// lib/agents/types.ts — same deliberate cross-layer duplication as
+// Platform/Language, not an oversight.
+export type ContentType = "youtube_tutorial" | "podcast_vodcast" | "short_form";
+
 export type ModuleKey = "script" | "seo" | "thumbnail" | "checklist";
 
 export interface PipelineModule {
@@ -76,6 +83,7 @@ export interface Project {
   id: string;
   title: string;
   platform: Platform;
+  contentType: ContentType;
   client: ClientProfile;
   channelUrl: string | null;
   priority: Priority;
@@ -97,6 +105,13 @@ export interface ScriptDetail {
   content: string;
   hook: string | null;
   chapters: ScriptChapter[];
+  contentType: ContentType;
+  // The three podcast/vodcast-only deliverables (0010) — null for
+  // youtube_tutorial/short_form scripts, and for any script generated
+  // before 0010 existed.
+  clipScript: string | null;
+  ctaLine: string | null;
+  podDescription: string | null;
   // Keyword-research selections (extracted from the script + YouTube
   // trending + manual additions). Null until "Salvar keywords" or "Aprovar
   // roteiro" persists a selection — see PATCH /api/scripts/[id].
@@ -135,6 +150,7 @@ export interface ProjectDetail {
   title: string;
   platform: Platform;
   language: Language;
+  contentType: ContentType;
   status: ApprovalStatus;
   client: ClientProfile;
   channelUrl: string | null;

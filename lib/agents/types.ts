@@ -9,12 +9,19 @@ import type { Platform } from "@/lib/connectors/types";
 // form only ever offers these two), so this union is the actual constraint.
 export type Language = "pt-BR" | "en-US";
 
+// Content type, set per-project (see 0010_content_type_and_deliverables.sql)
+// — selects which Script Forge prompt/structure applies. Not a Postgres
+// enum either. Duplicated in lib/dashboard/types.ts, same deliberate
+// cross-layer pattern as Language/Platform.
+export type ContentType = "youtube_tutorial" | "podcast_vodcast" | "short_form";
+
 export interface ScriptForgeInput {
   clientId: string;
   projectId: string;
   platform: Platform;
   rawTranscript: string;
   language: Language;
+  contentType: ContentType;
 }
 
 // `type`, not `interface` — interfaces don't get an implicit index
@@ -30,6 +37,12 @@ export interface ScriptForgeOutput {
   content: string;
   hook: string;
   chapters: ScriptChapter[];
+  contentType: ContentType;
+  // podcast_vodcast-only deliverables (0010) — null for youtube_tutorial/
+  // short_form, where the tool is never asked to fill them.
+  clipScript: string | null;
+  ctaLine: string | null;
+  podDescription: string | null;
   crossReferencedProjectIds: string[];
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import type { ApprovalStatus, PipelineModule, Priority, Project } from "@/lib/dashboard/types";
+import type { ApprovalStatus, ContentType, PipelineModule, Priority, Project } from "@/lib/dashboard/types";
 import { toClientProfile } from "@/lib/dashboard/types";
 
 // TODO(auth): replace with the authenticated user's client_id once Supabase
@@ -99,7 +99,7 @@ export async function GET(request: Request) {
   let projectsQuery = supabase
     .from("projects")
     .select(
-      "id, title, platform, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
+      "id, title, platform, content_type, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
     )
     .is("external_video_id", null);
   if (clientId) projectsQuery = projectsQuery.eq("client_id", clientId);
@@ -191,6 +191,7 @@ export async function GET(request: Request) {
       id: project.id,
       title: project.title,
       platform: project.platform,
+      contentType: project.content_type as ContentType,
       // Non-null: client_id is `references clients(id) on delete cascade`,
       // so every project row here has a real client, and distinctClientIds
       // (built straight from these same rows) is exactly what clientById
@@ -211,6 +212,7 @@ export async function GET(request: Request) {
 
 const VALID_LANGUAGES = ["pt-BR", "en-US"];
 const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
+const VALID_CONTENT_TYPES = ["youtube_tutorial", "podcast_vodcast", "short_form"];
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -244,6 +246,12 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json({ error: "tags must be an array of strings" }, { status: 400 });
   }
+  if (body?.contentType !== undefined && !VALID_CONTENT_TYPES.includes(body.contentType)) {
+    return NextResponse.json(
+      { error: `contentType must be one of: ${VALID_CONTENT_TYPES.join(", ")}` },
+      { status: 400 }
+    );
+  }
 
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -258,6 +266,7 @@ export async function POST(request: Request) {
       ...(body.priority !== undefined ? { priority: body.priority } : {}),
       ...(body.deadline !== undefined ? { deadline: body.deadline } : {}),
       ...(body.tags !== undefined ? { tags: body.tags } : {}),
+      ...(body.contentType !== undefined ? { content_type: body.contentType } : {}),
     })
     .select()
     .single();

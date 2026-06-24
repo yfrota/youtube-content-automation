@@ -14,7 +14,7 @@ import {
   TiktokIcon,
 } from "@/components/icons";
 import { PRIORITY_LABELS } from "@/lib/dashboard/types";
-import type { ClientProfile, Priority } from "@/lib/dashboard/types";
+import type { ClientProfile, ContentType, Priority } from "@/lib/dashboard/types";
 
 function Spinner() {
   return (
@@ -53,6 +53,14 @@ const PLATFORM_OPTIONS = [
 
 type PlatformOption = (typeof PLATFORM_OPTIONS)[number]["value"];
 
+// Central to the pipeline (selects which Script Forge prompt/structure
+// applies, 0010) — lives in the main form, not "Configurações avançadas".
+const CONTENT_TYPE_OPTIONS: { value: ContentType; emoji: string; label: string }[] = [
+  { value: "youtube_tutorial", emoji: "🎬", label: "YouTube Tutorial" },
+  { value: "podcast_vodcast", emoji: "🎙️", label: "Podcast / Vodcast" },
+  { value: "short_form", emoji: "📱", label: "Short-form / Reel" },
+];
+
 const PRIORITIES: Priority[] = ["normal", "high", "urgent", "low"];
 
 export function NewProjectContent() {
@@ -65,6 +73,7 @@ export function NewProjectContent() {
   const [clientId, setClientId] = useState(preselectedClientId ?? "");
 
   const [title, setTitle] = useState("");
+  const [contentType, setContentType] = useState<ContentType>("youtube_tutorial");
   const [platform, setPlatform] = useState<PlatformOption>("youtube");
   const [channelUrl, setChannelUrl] = useState("");
   const [language, setLanguage] = useState<"pt-BR" | "en-US">("pt-BR");
@@ -124,6 +133,7 @@ export function NewProjectContent() {
         body: JSON.stringify({
           clientId,
           platform,
+          contentType,
           title,
           externalChannelId: channelUrl.trim() || undefined,
           language,
@@ -210,6 +220,39 @@ export function NewProjectContent() {
               className="h-11 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
             />
           </label>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              Tipo de conteúdo
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              {CONTENT_TYPE_OPTIONS.map(({ value, emoji, label }) => {
+                const selected = value === contentType;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setContentType(value)}
+                    className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors duration-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/40 ${
+                      selected
+                        ? "border-accent bg-accent/5"
+                        : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    <span className="text-xl" aria-hidden="true">
+                      {emoji}
+                    </span>
+                    <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300">
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              Define a estrutura e o tamanho do script gerado pelo agente.
+            </span>
+          </div>
 
           <div className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">

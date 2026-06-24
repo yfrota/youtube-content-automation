@@ -43,6 +43,42 @@ function KeywordChip({
   );
 }
 
+// Used for the word counts in the split-view panel headers (0010) — a
+// simple whitespace split is plenty for a rough "how long is this" signal,
+// no need for real tokenization here.
+function wordCount(text: string | null | undefined): number {
+  if (!text) return 0;
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+// The three podcast_vodcast-only deliverables (clip_script/cta_line/
+// pod_description, 0010) share this exact collapsed-by-default shell —
+// same visual pattern the old "Ver transcript original ↕" toggle used.
+function CollapsibleDeliverable({ title, content }: { title: string; content: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-800">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400"
+      >
+        {title}
+        <ChevronDownIcon
+          className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+      {open && (
+        <div className="animate-fade-in border-t border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-800/20">
+          <p className="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-300">{content}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TRENDING_DEBOUNCE_MS = 500;
 
 interface ScriptStageProps {
@@ -69,13 +105,17 @@ export function ScriptStage({
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
 
+  // Estado 2 — regenerate (split-view right panel header)
+  const [regenerating, setRegenerating] = useState(false);
+
   // Estado 2/3 — approve / unapprove
   const [approving, setApproving] = useState(false);
   const [unapproving, setUnapproving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Seção A — collapsible original transcript
-  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  // Estado 2 — which panel mobile shows (< 768px only; desktop always
+  // shows both side by side, this state is irrelevant there).
+  const [mobileTab, setMobileTab] = useState<"transcript" | "script">("script");
 
   // Seção C1 — keywords extracted from the script
   const [extractedKeywords, setExtractedKeywords] = useState<string[]>([]);
@@ -209,6 +249,10 @@ export function ScriptStage({
         content: string;
         hook: string;
         chapters: ScriptDetail["chapters"];
+        contentType: ScriptDetail["contentType"];
+        clipScript: string | null;
+        ctaLine: string | null;
+        podDescription: string | null;
       };
       onScriptChange({
         id: result.id,
@@ -217,6 +261,10 @@ export function ScriptStage({
         content: result.content,
         hook: result.hook,
         chapters: result.chapters,
+        contentType: result.contentType,
+        clipScript: result.clipScript,
+        ctaLine: result.ctaLine,
+        podDescription: result.podDescription,
         keywordsContext: null,
         createdAt: new Date().toISOString(),
       });
@@ -225,6 +273,62 @@ export function ScriptStage({
       setGenerateError(err instanceof Error ? err.message : "Falha ao gerar roteiro");
     } finally {
       setGenerating(false);
+      onGeneratingChange?.(false);
+    }
+  }
+
+  // "Regenerar" in the split-view's right panel — re-runs Script Forge off
+  // the already-persisted rawTranscript (read-only in this state, there's
+  // no editable transcript input once a script exists), same "just call
+  // the generate endpoint again" pattern SeoStage's own Regenerar uses.
+  async function handleRegenerate() {
+    if (!script || regenerating) return;
+    setRegenerating(true);
+    onGeneratingChange?.(true);
+    setGenerateError(null);
+    try {
+      const res = await fetch("/api/agents/script-forge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          platform,
+          rawTranscript: script.rawTranscript ?? "",
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Falha ao regenerar roteiro");
+
+      const result = body.script as {
+        id: string;
+        status: ScriptDetail["status"];
+        content: string;
+        hook: string;
+        chapters: ScriptDetail["chapters"];
+        contentType: ScriptDetail["contentType"];
+        clipScript: string | null;
+        ctaLine: string | null;
+        podDescription: string | null;
+      };
+      onScriptChange({
+        id: result.id,
+        rawTranscript: script.rawTranscript,
+        status: result.status,
+        content: result.content,
+        hook: result.hook,
+        chapters: result.chapters,
+        contentType: result.contentType,
+        clipScript: result.clipScript,
+        ctaLine: result.ctaLine,
+        podDescription: result.podDescription,
+        keywordsContext: null,
+        createdAt: new Date().toISOString(),
+      });
+      showToast("Roteiro regenerado");
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : "Falha ao regenerar roteiro");
+    } finally {
+      setRegenerating(false);
       onGeneratingChange?.(false);
     }
   }
@@ -311,12 +415,15 @@ export function ScriptStage({
             Cole o conteúdo bruto — o Script Forge vai reescrever para o formato YouTube com
             hook, capítulos e linguagem otimizada.
           </span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            Suporte a textos longos — episódios completos de podcast, múltiplos segmentos,
+            rascunhos extensos.
+          </span>
           <textarea
-            rows={8}
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
             placeholder="Cole aqui a transcrição bruta do vídeo..."
-            className="rounded-lg border border-gray-200 bg-background p-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
+            className="min-h-[300px] resize-y rounded-lg border border-gray-200 bg-background p-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
           />
         </label>
 
@@ -342,7 +449,8 @@ export function ScriptStage({
     );
   }
 
-  // ESTADO 3 — approved (kelly_review or beyond).
+  // ESTADO 3 — approved (kelly_review or beyond). Unchanged — compact
+  // summary, no split view.
   if (script.status !== "draft") {
     const keywordCount = script.keywordsContext?.length ?? 0;
     return (
@@ -378,75 +486,142 @@ export function ScriptStage({
     );
   }
 
-  // ESTADO 2 — generated, awaiting review (status: draft).
-  return (
-    <div className="flex flex-col gap-5">
-      {/* Seção A — original transcript, collapsed by default */}
-      <div className="rounded-lg border border-gray-200 dark:border-gray-800">
-        <button
-          type="button"
-          onClick={() => setTranscriptExpanded((v) => !v)}
-          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400"
-        >
-          Ver transcript original ↕
-          <ChevronDownIcon
-            className={`h-3.5 w-3.5 transition-transform duration-200 ${
-              transcriptExpanded ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-        {transcriptExpanded && (
-          <div className="animate-fade-in border-t border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-800/20">
-            <p className="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-300">
-              {script.rawTranscript || "—"}
-            </p>
-          </div>
-        )}
-      </div>
+  // ESTADO 2 — generated, awaiting review (status: draft). Split view:
+  // transcript (read-only, left/first tab) + Script Forge output
+  // (right/second tab). Built once as JSX consts so the exact same panels
+  // back both the desktop side-by-side grid and the mobile single-tab slot.
+  const transcriptWords = wordCount(script.rawTranscript);
+  const scriptWords = wordCount(script.content);
 
-      {/* Seção B — Script Forge output (layout unchanged) */}
-      <div className="flex flex-col gap-5">
-        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-950/50 dark:text-green-300">
+  const transcriptPanel = (
+    <div className="flex min-h-[400px] flex-col rounded-lg border border-gray-200 dark:border-gray-800 md:min-h-[500px] md:max-h-[70vh]">
+      <div className="shrink-0 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          Transcript original
+        </p>
+        <p className="text-[11px] text-gray-400 dark:text-gray-500">
+          {transcriptWords} palavra{transcriptWords === 1 ? "" : "s"}
+        </p>
+      </div>
+      <div className="flex-1 overflow-y-auto bg-gray-50 p-3 dark:bg-gray-800/20">
+        <p className="whitespace-pre-wrap font-mono text-sm text-gray-600 dark:text-gray-300">
+          {script.rawTranscript || "—"}
+        </p>
+      </div>
+    </div>
+  );
+
+  const scriptPanel = (
+    <div className="flex min-h-[400px] flex-col rounded-lg border border-gray-200 dark:border-gray-800 md:min-h-[500px] md:max-h-[70vh]">
+      <div className="shrink-0 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-950/50 dark:text-green-300">
           ✓ Reescrito pelo Script Forge
         </span>
+      </div>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-3 py-1.5 dark:border-gray-800">
+        <p className="text-[11px] text-gray-400 dark:text-gray-500">
+          {scriptWords} palavra{scriptWords === 1 ? "" : "s"}
+        </p>
+        <button
+          type="button"
+          onClick={handleRegenerate}
+          disabled={regenerating}
+          className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500 transition-colors duration-200 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400"
+        >
+          {regenerating && <Spinner />}
+          Regenerar ↺
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex flex-col gap-5">
+          <div className="rounded-lg bg-accent/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-accent">Hook</p>
+            <p className="mt-1 text-sm text-foreground">{script.hook}</p>
+          </div>
 
-        <div className="rounded-lg bg-accent/5 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-accent">Hook</p>
-          <p className="mt-1 text-sm text-foreground">{script.hook}</p>
-        </div>
+          {script.chapters.length > 0 && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                Capítulos
+              </p>
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {script.chapters.map((chapter, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"
+                  >
+                    <span className="font-mono text-xs text-gray-400 dark:text-gray-500">
+                      {chapter.startTime}
+                    </span>
+                    {chapter.title}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-        {script.chapters.length > 0 && (
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              Capítulos
+              Roteiro completo
             </p>
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {script.chapters.map((chapter, i) => (
-                <li
-                  key={i}
-                  className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"
-                >
-                  <span className="font-mono text-xs text-gray-400 dark:text-gray-500">
-                    {chapter.startTime}
-                  </span>
-                  {chapter.title}
-                </li>
-              ))}
-            </ul>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+              {script.content}
+            </p>
           </div>
-        )}
 
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-            Roteiro completo
-          </p>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-700 dark:text-gray-300">
-            {script.content}
-          </p>
+          {script.clipScript && (
+            <CollapsibleDeliverable title="📱 Script do Clip (30s)" content={script.clipScript} />
+          )}
+          {script.ctaLine && (
+            <CollapsibleDeliverable title="📢 CTA Final" content={script.ctaLine} />
+          )}
+          {script.podDescription && (
+            <CollapsibleDeliverable
+              title="🎙️ Descrição do Podcast"
+              content={script.podDescription}
+            />
+          )}
         </div>
       </div>
+    </div>
+  );
 
-      {/* Seção C — Keywords panel */}
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Desktop split view — 40/60, independent scroll per panel */}
+      <div className="hidden gap-4 md:grid md:grid-cols-[2fr_3fr]">
+        {transcriptPanel}
+        {scriptPanel}
+      </div>
+
+      {/* Mobile — one panel at a time via tabs */}
+      <div className="md:hidden">
+        <div className="mb-3 inline-flex rounded-lg border border-gray-200 p-0.5 dark:border-gray-800">
+          <button
+            type="button"
+            onClick={() => setMobileTab("transcript")}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 ${
+              mobileTab === "transcript"
+                ? "bg-accent text-white"
+                : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            Transcript original
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("script")}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 ${
+              mobileTab === "script" ? "bg-accent text-white" : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            Script gerado
+          </button>
+        </div>
+        {mobileTab === "transcript" ? transcriptPanel : scriptPanel}
+      </div>
+
+      {/* Seção C — Keywords panel, below the split view/tabs either way */}
       <div className="flex flex-col gap-4 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
         {selectedKeywords.size > 0 && (
           <div>
@@ -556,7 +731,9 @@ export function ScriptStage({
         </div>
       </div>
 
-      {actionError && <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>}
+      {(generateError || actionError) && (
+        <p className="text-sm text-red-600 dark:text-red-400">{generateError ?? actionError}</p>
+      )}
 
       <div>
         <button

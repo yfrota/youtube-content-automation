@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import type { Priority, ProjectDetail, ScriptChapter, SeoTitleOption } from "@/lib/dashboard/types";
+import type {
+  ContentType,
+  Priority,
+  ProjectDetail,
+  ScriptChapter,
+  SeoTitleOption,
+} from "@/lib/dashboard/types";
 import { toClientProfile } from "@/lib/dashboard/types";
 
 const CLIENT_SELECT = "id, name, image_url, description, contact_email, phone, created_at, updated_at";
@@ -25,7 +31,7 @@ export async function GET(
   const { data: project, error: projectError } = await supabase
     .from("projects")
     .select(
-      "id, title, platform, language, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
+      "id, title, platform, language, content_type, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -52,7 +58,9 @@ export async function GET(
   // is null) are a different concept, see lib/rag/indexer.ts.
   const { data: scripts, error: scriptsError } = await supabase
     .from("scripts")
-    .select("id, raw_transcript, content, hook, chapters, keywords_context, status, version, created_at")
+    .select(
+      "id, raw_transcript, content, hook, chapters, content_type, clip_script, cta_line, pod_description, keywords_context, status, version, created_at"
+    )
     .eq("project_id", id)
     .not("raw_transcript", "is", null)
     .order("version", { ascending: false })
@@ -92,6 +100,7 @@ export async function GET(
     title: project.title,
     platform: project.platform,
     language: project.language,
+    contentType: project.content_type as ContentType,
     status: project.status,
     client: toClientProfile(clientRow),
     channelUrl: project.external_channel_id,
@@ -107,6 +116,10 @@ export async function GET(
           content: latestScript.content,
           hook: latestScript.hook,
           chapters: (latestScript.chapters as unknown as ScriptChapter[] | null) ?? [],
+          contentType: latestScript.content_type as ContentType,
+          clipScript: latestScript.clip_script,
+          ctaLine: latestScript.cta_line,
+          podDescription: latestScript.pod_description,
           keywordsContext:
             (latestScript.keywords_context as unknown as string[] | null) ?? null,
           status: latestScript.status,
