@@ -18,11 +18,11 @@ const TOOL_NAME = "emit_script";
 // (0010/0011) but live testing hit a 402 on THIS account's current credit
 // balance ("requested up to 16384, can only afford 13146") — 16384 is well
 // within the model's own 65535 ceiling, the blocker is account credits, not
-// the model. 12000 is the real, currently-affordable value verified live;
-// it'll silently get more headroom as credits are topped up, but raising
-// this constant further should be re-verified live first, not assumed safe
-// from the model's ceiling alone.
-const MAX_OUTPUT_TOKENS = 12000;
+// the model. Lowered to 11000 (from a previously-verified 12000) for extra
+// margin below that observed 13146 ceiling; it'll silently get more
+// headroom as credits are topped up, but raising this constant should be
+// re-verified live first, not assumed safe from the model's ceiling alone.
+const MAX_OUTPUT_TOKENS = 11000;
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
 
