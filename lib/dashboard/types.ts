@@ -173,18 +173,19 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   tiktok: "TikTok",
 };
 
-// Pastel tints of each platform's brand color (not the app's muted palette
-// either) — enough to read as "this is YouTube/Instagram/etc" at a glance
-// without a loud solid-color chip. Selectable in the new-project form's
-// picker as of 0009, but spotify/tiktok still have no connector or agent
-// behind them — same gap instagram/facebook/linkedin have had since 0001.
+// Brand colors, used verbatim (not the app's muted palette) so the platform
+// badge reads as "this is YouTube/Instagram/etc" at a glance. A pastel-tint
+// version was tried and reverted — solid brand colors are the kept design.
+// Selectable in the new-project form's picker as of 0009, but spotify/tiktok
+// still have no connector or agent behind them — same gap instagram/
+// facebook/linkedin have had since 0001.
 export const PLATFORM_BADGE_STYLES: Record<Platform, { background: string; color: string }> = {
-  youtube: { background: "#FFE5E5", color: "#CC0000" },
-  instagram: { background: "#F3E5FF", color: "#6B21A8" },
-  linkedin: { background: "#E5F0FF", color: "#0A4FA8" },
-  facebook: { background: "#E8F0FF", color: "#1877F2" },
-  spotify: { background: "#E5F7ED", color: "#1A7A3F" },
-  tiktok: { background: "#F0F0F0", color: "#000000" },
+  youtube: { background: "#FF0000", color: "#ffffff" },
+  instagram: { background: "linear-gradient(45deg, #833AB4, #FD1D1D)", color: "#ffffff" },
+  linkedin: { background: "#0A66C2", color: "#ffffff" },
+  facebook: { background: "#1877F2", color: "#ffffff" },
+  spotify: { background: "#1DB954", color: "#ffffff" },
+  tiktok: { background: "#000000", color: "#ffffff" },
 };
 
 export const PRIORITY_LABELS: Record<Priority, string> = {
