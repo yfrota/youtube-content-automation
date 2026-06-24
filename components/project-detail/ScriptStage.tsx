@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/dashboard/toast";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ChevronDownIcon, SparklesIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/context";
 import type { Language, Platform, ScriptDetail } from "@/lib/dashboard/types";
 
 function Spinner() {
@@ -80,6 +81,9 @@ function CollapsibleDeliverable({ title, content }: { title: string; content: st
 }
 
 const TRENDING_DEBOUNCE_MS = 500;
+const SAVE_KEYWORDS_SUCCESS_MS = 2000;
+
+type SaveState = "idle" | "saving" | "saved" | "error";
 
 interface ScriptStageProps {
   projectId: string;
@@ -88,6 +92,11 @@ interface ScriptStageProps {
   script: ScriptDetail | null;
   onScriptChange: (script: ScriptDetail) => void;
   onGeneratingChange?: (generating: boolean) => void;
+  /** Notifies the parent page when the Estado 2 split view is on screen, so
+   * it can widen its own max-width container — negative margin alone only
+   * reclaims this stage's own padding, it can't escape an ancestor's
+   * max-width. */
+  onSplitViewActive?: (active: boolean) => void;
 }
 
 export function ScriptStage({
@@ -97,8 +106,10 @@ export function ScriptStage({
   script,
   onScriptChange,
   onGeneratingChange,
+  onSplitViewActive,
 }: ScriptStageProps) {
   const { showToast } = useToast();
+  const t = useT();
 
   // Estado 1 — generation
   const [transcript, setTranscript] = useState("");
@@ -136,7 +147,10 @@ export function ScriptStage({
   const [selectedKeywords, setSelectedKeywords] = useState<Set<string>>(
     () => new Set(script?.keywordsContext ?? [])
   );
-  const [savingKeywords, setSavingKeywords] = useState(false);
+  // idle -> saving -> saved (auto-reverts after SAVE_KEYWORDS_SUCCESS_MS) or
+  // error (stays until the user interacts with the keywords panel again —
+  // toggleKeyword/handleAddManualKeyword below reset it back to idle).
+  const [saveState, setSaveState] = useState<SaveState>("idle");
 
   const scriptId = script?.id;
 
@@ -150,6 +164,14 @@ export function ScriptStage({
     setSeededForScriptId(scriptId);
     setSelectedKeywords(new Set(script?.keywordsContext ?? []));
   }
+
+  useEffect(() => {
+    onSplitViewActive?.(script?.status === "draft");
+    // onSplitViewActive intentionally omitted — it's an inline callback from
+    // the parent, including it would re-run this effect (and notify the
+    // parent redundantly) on every unrelated parent re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [script?.status]);
 
   // Auto-load extracted keywords the moment a draft script is on screen.
   useEffect(() => {
@@ -214,6 +236,7 @@ export function ScriptStage({
   const visibleTrendingSuggestions = trendingQuery.trim() ? trendingSuggestions : [];
 
   function toggleKeyword(keyword: string) {
+    if (saveState === "error") setSaveState("idle");
     setSelectedKeywords((prev) => {
       const next = new Set(prev);
       if (next.has(keyword)) next.delete(keyword);
@@ -225,6 +248,7 @@ export function ScriptStage({
   function handleAddManualKeyword() {
     const keyword = manualKeyword.trim();
     if (!keyword) return;
+    if (saveState === "error") setSaveState("idle");
     setSelectedKeywords((prev) => new Set(prev).add(keyword));
     setManualKeyword("");
   }
@@ -334,8 +358,8 @@ export function ScriptStage({
   }
 
   async function handleSaveKeywords() {
-    if (!script || savingKeywords) return;
-    setSavingKeywords(true);
+    if (!script || saveState === "saving") return;
+    setSaveState("saving");
     setActionError(null);
     try {
       const res = await fetch(`/api/scripts/${script.id}`, {
@@ -347,10 +371,11 @@ export function ScriptStage({
       if (!res.ok) throw new Error(body?.error ?? "Falha ao salvar keywords");
       onScriptChange({ ...script, keywordsContext: [...selectedKeywords] });
       showToast("Keywords salvas");
+      setSaveState("saved");
+      setTimeout(() => setSaveState("idle"), SAVE_KEYWORDS_SUCCESS_MS);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Falha ao salvar keywords");
-    } finally {
-      setSavingKeywords(false);
+      setSaveState("error");
     }
   }
 
@@ -439,10 +464,12 @@ export function ScriptStage({
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {generating ? <Spinner /> : <SparklesIcon className="h-4 w-4" />}
-            Gerar Script YouTube
+            {t("scriptStage.generateScript")}
           </button>
           {generating && (
-            <span className="text-sm text-gray-500 dark:text-gray-400">Gerando script...</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {t("status.generating")}
+            </span>
           )}
         </div>
       </div>
@@ -479,7 +506,7 @@ export function ScriptStage({
             disabled={unapproving}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 transition-colors duration-200 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/50"
           >
-            {unapproving && <Spinner />}← Desfazer aprovação
+            {unapproving && <Spinner />}← {t("scriptStage.undoApproval")}
           </button>
         </div>
       </div>
@@ -497,10 +524,11 @@ export function ScriptStage({
     <div className="flex min-h-[400px] flex-col rounded-lg border border-gray-200 dark:border-gray-800 md:min-h-[500px] md:max-h-[70vh]">
       <div className="shrink-0 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
         <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-          Transcript original
+          {t("scriptStage.originalTranscript")}
         </p>
         <p className="text-[11px] text-gray-400 dark:text-gray-500">
-          {transcriptWords} palavra{transcriptWords === 1 ? "" : "s"}
+          {transcriptWords} {t("scriptStage.wordCount")}
+          {transcriptWords === 1 ? "" : "s"}
         </p>
       </div>
       <div className="flex-1 overflow-y-auto bg-gray-50 p-3 dark:bg-gray-800/20">
@@ -515,12 +543,13 @@ export function ScriptStage({
     <div className="flex min-h-[400px] flex-col rounded-lg border border-gray-200 dark:border-gray-800 md:min-h-[500px] md:max-h-[70vh]">
       <div className="shrink-0 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-950/50 dark:text-green-300">
-          ✓ Reescrito pelo Script Forge
+          ✓ {t("scriptStage.rewrittenByScriptForge")}
         </span>
       </div>
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-3 py-1.5 dark:border-gray-800">
         <p className="text-[11px] text-gray-400 dark:text-gray-500">
-          {scriptWords} palavra{scriptWords === 1 ? "" : "s"}
+          {scriptWords} {t("scriptStage.wordCount")}
+          {scriptWords === 1 ? "" : "s"}
         </p>
         <button
           type="button"
@@ -529,7 +558,7 @@ export function ScriptStage({
           className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500 transition-colors duration-200 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400"
         >
           {regenerating && <Spinner />}
-          Regenerar ↺
+          {t("scriptStage.regenerate")} ↺
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-3">
@@ -570,14 +599,20 @@ export function ScriptStage({
           </div>
 
           {script.clipScript && (
-            <CollapsibleDeliverable title="📱 Script do Clip (30s)" content={script.clipScript} />
+            <CollapsibleDeliverable
+              title={`📱 ${t("scriptStage.clipScript")}`}
+              content={script.clipScript}
+            />
           )}
           {script.ctaLine && (
-            <CollapsibleDeliverable title="📢 CTA Final" content={script.ctaLine} />
+            <CollapsibleDeliverable
+              title={`📢 ${t("scriptStage.ctaFinal")}`}
+              content={script.ctaLine}
+            />
           )}
           {script.podDescription && (
             <CollapsibleDeliverable
-              title="🎙️ Descrição do Podcast"
+              title={`🎙️ ${t("scriptStage.podDescription")}`}
               content={script.podDescription}
             />
           )}
@@ -588,13 +623,18 @@ export function ScriptStage({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Desktop split view — 40/60, independent scroll per panel */}
-      <div className="hidden gap-4 md:grid md:grid-cols-[2fr_3fr]">
+      {/* Desktop split view — 40/60, independent scroll per panel.
+          -mx-6 reclaims PipelineStage's own p-6 horizontal padding (its
+          exact value, not a generic scale) so the panels reach the stage
+          card's edges instead of sitting inset within it. */}
+      <div className="-mx-6 hidden gap-4 md:grid md:grid-cols-[2fr_3fr]">
         {transcriptPanel}
         {scriptPanel}
       </div>
 
-      {/* Mobile — one panel at a time via tabs */}
+      {/* Mobile — one panel at a time via tabs. Only the panel itself
+          bleeds via -mx-6 (matching the desktop grid above) — the tab
+          switcher stays inset so it lines up with the rest of the page. */}
       <div className="md:hidden">
         <div className="mb-3 inline-flex rounded-lg border border-gray-200 p-0.5 dark:border-gray-800">
           <button
@@ -606,7 +646,7 @@ export function ScriptStage({
                 : "text-gray-500 dark:text-gray-400"
             }`}
           >
-            Transcript original
+            {t("scriptStage.originalTranscript")}
           </button>
           <button
             type="button"
@@ -615,10 +655,10 @@ export function ScriptStage({
               mobileTab === "script" ? "bg-accent text-white" : "text-gray-500 dark:text-gray-400"
             }`}
           >
-            Script gerado
+            {t("scriptStage.stageTitle")}
           </button>
         </div>
-        {mobileTab === "transcript" ? transcriptPanel : scriptPanel}
+        <div className="-mx-6">{mobileTab === "transcript" ? transcriptPanel : scriptPanel}</div>
       </div>
 
       {/* Seção C — Keywords panel, below the split view/tabs either way */}
@@ -639,7 +679,7 @@ export function ScriptStage({
         {/* C1 — extracted from script */}
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-            Keywords identificadas no roteiro
+            {t("scriptStage.keywordsIdentified")}
           </p>
           {extractingKeywords ? (
             <p className="mt-2 text-sm text-gray-400 dark:text-gray-500">Analisando roteiro...</p>
@@ -662,7 +702,7 @@ export function ScriptStage({
         {/* C2 — YouTube trending */}
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-            Tendências no YouTube agora
+            {t("scriptStage.youtubeTrends")}
           </p>
           <input
             type="text"
@@ -690,7 +730,7 @@ export function ScriptStage({
         {/* C3 — manual */}
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-            Adicionar keyword
+            {t("scriptStage.addKeyword")}
           </p>
           <div className="mt-2 flex items-center gap-2">
             <input
@@ -722,11 +762,23 @@ export function ScriptStage({
           <button
             type="button"
             onClick={handleSaveKeywords}
-            disabled={savingKeywords}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 transition-colors duration-200 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/50"
+            disabled={saveState === "saving"}
+            className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+              saveState === "saved"
+                ? "border-green-200 text-green-700 dark:border-green-900 dark:text-green-300"
+                : saveState === "error"
+                  ? "border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+                  : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/50"
+            }`}
           >
-            {savingKeywords && <Spinner />}
-            Salvar keywords
+            {saveState === "saving" && <Spinner />}
+            {saveState === "saving"
+              ? t("scriptStage.savingKeywords")
+              : saveState === "saved"
+                ? t("scriptStage.keywordsSaved")
+                : saveState === "error"
+                  ? t("scriptStage.keywordsError")
+                  : t("scriptStage.saveKeywords")}
           </button>
         </div>
       </div>
@@ -743,7 +795,7 @@ export function ScriptStage({
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {approving && <Spinner />}
-          Aprovar roteiro
+          {t("scriptStage.approveScript")}
         </button>
       </div>
     </div>

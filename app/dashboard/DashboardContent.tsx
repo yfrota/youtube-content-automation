@@ -14,6 +14,7 @@ import { EditProjectModal } from "@/components/dashboard/EditProjectModal";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { useToast } from "@/components/dashboard/toast";
 import { HaloMark } from "@/components/logo";
+import { useT } from "@/lib/i18n/context";
 import type { ClientProfile, Project } from "@/lib/dashboard/types";
 
 interface ClientGroup {
@@ -23,6 +24,7 @@ interface ClientGroup {
 
 export function DashboardContent() {
   const router = useRouter();
+  const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
@@ -156,9 +158,11 @@ export function DashboardContent() {
 
         <header className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-light tracking-tight text-foreground">Projetos</h1>
+            <h1 className="text-2xl font-light tracking-tight text-foreground">
+              {t("dashboard.pageTitle")}
+            </h1>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              Acompanhe cada etapa da produção, do roteiro à publicação.
+              {t("dashboard.pageSubtitle")}
             </p>
           </div>
 
@@ -168,7 +172,7 @@ export function DashboardContent() {
             className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover"
           >
             <PlusIcon className="h-4 w-4" />
-            Novo projeto
+            {t("dashboard.newProject")}
           </button>
         </header>
 
@@ -296,9 +300,9 @@ export function DashboardContent() {
 
       {deletingProject && (
         <ConfirmDialog
-          title="Excluir projeto"
+          title={t("dashboard.deleteProject")}
           message="Tem certeza? Esta ação não pode ser desfeita."
-          confirmLabel="Excluir"
+          confirmLabel={t("dashboard.confirmDelete")}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeletingProject(null)}
         />

@@ -13,11 +13,16 @@ const TOOL_NAME = "emit_script";
 // Without an explicit cap, OpenRouter defaults to the model's max output
 // (65535 for this model) and the request gets rejected with a 402 if the
 // account can't afford that many tokens — verified this fails silently
-// otherwise (no warning, just a hard error) during manual testing. Raised
-// 4096 -> 8192 for podcast_vodcast's full-episode verbatim scripts (0010) —
-// still explicitly capped, the load-bearing part was always "set something",
-// not the specific number.
-const MAX_OUTPUT_TOKENS = 8192;
+// otherwise (no warning, just a hard error) during manual testing. Tried
+// raising 8192 -> 16384 for podcast_vodcast's full-episode verbatim scripts
+// (0010/0011) but live testing hit a 402 on THIS account's current credit
+// balance ("requested up to 16384, can only afford 13146") — 16384 is well
+// within the model's own 65535 ceiling, the blocker is account credits, not
+// the model. 12000 is the real, currently-affordable value verified live;
+// it'll silently get more headroom as credits are topped up, but raising
+// this constant further should be re-verified live first, not assumed safe
+// from the model's ceiling alone.
+const MAX_OUTPUT_TOKENS = 12000;
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
 
@@ -130,17 +135,48 @@ function buildPodcastVodcastPrompt(
   contextBlock: string,
   rawTranscript: string
 ): string {
+  // Anchors the model's output length to the input's, instead of leaving
+  // length unconstrained — without this the model tends to summarize a
+  // full episode down to a few paragraphs despite "NÃO resuma" (no schema
+  // change involved, prompt-only fix — verified live: pre-fix outputs ran
+  // well under the source transcript; see CLAUDE.md for the live-tested
+  // caveat on short inputs vs. the "desenvolva completamente" sections).
+  const transcriptWordCount = rawTranscript.trim().split(/\s+/).length;
+  const minWords = Math.round(transcriptWordCount * 0.8);
+  const maxWords = Math.round(transcriptWordCount * 1.2);
+  const developFully =
+    "   Desenvolva completamente — não use placeholder ou resumo. Escreva\n" +
+    "   cada parágrafo como seria falado em voz alta.\n";
+
   return (
+    // Must come before every other instruction — clip_script/cta_line/
+    // pod_description previously had no explicit language mandate of their
+    // own, only the main script did (mid-prompt). Verified live with an
+    // en-US project that all four fields now come back in English.
+    "IDIOMA OBRIGATÓRIO: Escreva TODO o conteúdo em\n" +
+    `${language === "en-US" ? "American English" : "português brasileiro"}.\n` +
+    "Isso inclui sem exceção: script principal, clip_script,\n" +
+    "cta_line e pod_description.\n\n" +
     "Você é um roteirista especialista em podcasts e vodcasts.\n" +
     "Gere o SCRIPT COMPLETO VERBATIM — cada palavra que o apresentador\n" +
     "vai falar. NÃO resuma. NÃO encurte. Escreva o episódio inteiro.\n\n" +
+    "TAMANHO DO SCRIPT:\n" +
+    `O transcript original tem aproximadamente ${transcriptWordCount} palavras.\n` +
+    "O script final deve ter entre 80% e 120% dessa contagem\n" +
+    `(entre ${minWords} e ${maxWords} palavras).\n` +
+    "NÃO resuma nem condense — desenvolva cada seção completamente.\n" +
+    "Se uma seção estiver curta, adicione transições, ênfases e\n" +
+    "elementos de engajamento para manter o ritmo natural de um podcast.\n\n" +
     "ESTRUTURA OBRIGATÓRIA (nesta ordem):\n" +
     "1. TEASER HOOK — 2-3 parágrafos antes do intro formal.\n" +
     "   Impactante, filosófico, começa com uma pergunta ou afirmação forte.\n" +
+    developFully +
     "2. INTRO FORMAL — Ex: 'Hello beautiful souls.\n" +
     "   Welcome back to [nome do show].'\n" +
+    developFully +
     "3. ROADMAP DO EPISÓDIO — 'Here's where we're going together:\n" +
     "   First... Then... And finally...'\n" +
+    developFully +
     "4. DESENVOLVIMENTO em 2-3 partes longas com:\n" +
     "   - Parágrafos de 3-6 frases alternando com frases curtas de impacto\n" +
     "   - Pausas dramáticas com reticências (...)\n" +
@@ -149,12 +185,17 @@ function buildPodcastVodcastPrompt(
     "   - Perguntas diretas ao público ('What if...', 'Have you ever...')\n" +
     "   - Histórias pessoais do apresentador na primeira pessoa\n" +
     "   - Referências a pesquisas/autores quando o transcript mencionar\n" +
+    developFully +
     "5. CTA MID-EPISÓDIO — natural, não interrompe o flow,\n" +
     "   pede inscrição/follow de forma calorosa\n" +
+    developFully +
     "6. CLOSING QUESTIONS — 'For our ending tradition,\n" +
     "   here are questions to contemplate:' + 2-3 perguntas\n" +
+    developFully +
     "7. SIGN-OFF — caloroso, com frase de encerramento característica\n" +
-    "   do apresentador (extraia do transcript se houver padrão)\n\n" +
+    "   do apresentador (extraia do transcript se houver padrão)\n" +
+    developFully +
+    "\n" +
     "VOZ: calorosa, filosófica, espiritual.\n" +
     "NÃO corporativa. NÃO de tutorial técnico.\n" +
     "Referências a episódios anteriores: use TÍTULO E NÚMERO do episódio,\n" +

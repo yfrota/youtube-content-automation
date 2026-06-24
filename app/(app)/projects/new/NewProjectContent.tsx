@@ -13,6 +13,7 @@ import {
   SpotifyIcon,
   TiktokIcon,
 } from "@/components/icons";
+import { useT } from "@/lib/i18n/context";
 import { PRIORITY_LABELS } from "@/lib/dashboard/types";
 import type { ClientProfile, ContentType, Priority } from "@/lib/dashboard/types";
 
@@ -55,16 +56,19 @@ type PlatformOption = (typeof PLATFORM_OPTIONS)[number]["value"];
 
 // Central to the pipeline (selects which Script Forge prompt/structure
 // applies, 0010) — lives in the main form, not "Configurações avançadas".
-const CONTENT_TYPE_OPTIONS: { value: ContentType; emoji: string; label: string }[] = [
-  { value: "youtube_tutorial", emoji: "🎬", label: "YouTube Tutorial" },
-  { value: "podcast_vodcast", emoji: "🎙️", label: "Podcast / Vodcast" },
-  { value: "short_form", emoji: "📱", label: "Short-form / Reel" },
+// Labels are translation keys, not literal text — this array is a module
+// const and can't call useT() itself, same pattern as navItems.tsx.
+const CONTENT_TYPE_OPTIONS: { value: ContentType; emoji: string; labelKey: string }[] = [
+  { value: "youtube_tutorial", emoji: "🎬", labelKey: "forms.youtubetutorial" },
+  { value: "podcast_vodcast", emoji: "🎙️", labelKey: "forms.podcastVodcast" },
+  { value: "short_form", emoji: "📱", labelKey: "forms.shortForm" },
 ];
 
 const PRIORITIES: Priority[] = ["normal", "high", "urgent", "low"];
 
 export function NewProjectContent() {
   const router = useRouter();
+  const t = useT();
   const searchParams = useSearchParams();
   const preselectedClientId = searchParams.get("clientId");
 
@@ -209,7 +213,7 @@ export function NewProjectContent() {
 
           <label className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              Nome do projeto
+              {t("forms.projectName")}
             </span>
             <input
               type="text"
@@ -223,10 +227,10 @@ export function NewProjectContent() {
 
           <div className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              Tipo de conteúdo
+              {t("forms.contentType")}
             </span>
             <div className="grid grid-cols-3 gap-2">
-              {CONTENT_TYPE_OPTIONS.map(({ value, emoji, label }) => {
+              {CONTENT_TYPE_OPTIONS.map(({ value, emoji, labelKey }) => {
                 const selected = value === contentType;
                 return (
                   <button
@@ -243,7 +247,7 @@ export function NewProjectContent() {
                       {emoji}
                     </span>
                     <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300">
-                      {label}
+                      {t(labelKey)}
                     </span>
                   </button>
                 );
@@ -256,7 +260,7 @@ export function NewProjectContent() {
 
           <div className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              Plataforma
+              {t("forms.platform")}
             </span>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
               {PLATFORM_OPTIONS.map(({ value, label, Icon, color, enabled }) => {
@@ -286,7 +290,7 @@ export function NewProjectContent() {
 
           <label className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              URL do canal
+              {t("forms.channelUrl")}
             </span>
             <input
               type="url"
@@ -296,13 +300,13 @@ export function NewProjectContent() {
               className="h-11 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
             />
             <span className="text-xs text-gray-400 dark:text-gray-500">
-              Usado para indexar o catálogo de vídeos via RAG.
+              {t("forms.channelUrlHelper")}
             </span>
           </label>
 
           <label className="flex flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              Idioma do conteúdo
+              {t("forms.contentLanguage")}
             </span>
             <select
               value={language}
@@ -320,7 +324,7 @@ export function NewProjectContent() {
               onClick={() => setAdvancedOpen((v) => !v)}
               className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-gray-600 dark:text-gray-300"
             >
-              Configurações avançadas
+              {t("forms.advancedSettings")}
               <ChevronDownIcon
                 className={`h-4 w-4 transition-transform duration-200 ${advancedOpen ? "rotate-180" : ""}`}
               />
@@ -330,7 +334,7 @@ export function NewProjectContent() {
               <div className="animate-fade-in flex flex-col gap-5 border-t border-gray-200 p-4 dark:border-gray-800">
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                    Prioridade
+                    {t("forms.priority")}
                   </span>
                   <select
                     value={priority}
@@ -347,7 +351,7 @@ export function NewProjectContent() {
 
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                    Prazo
+                    {t("forms.deadline")}
                   </span>
                   <input
                     type="date"
@@ -359,7 +363,7 @@ export function NewProjectContent() {
 
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                    Tags
+                    {t("forms.projectTags")}
                   </span>
                   {tags.length > 0 && (
                     <div className="flex flex-wrap gap-2">
@@ -410,7 +414,7 @@ export function NewProjectContent() {
             onClick={() => router.push("/dashboard")}
             className="inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium text-gray-500 transition-colors duration-200 hover:bg-gray-50 hover:text-foreground dark:text-gray-400 dark:hover:bg-gray-800/50"
           >
-            Cancelar
+            {t("forms.cancel")}
           </button>
           <button
             type="submit"
@@ -418,7 +422,7 @@ export function NewProjectContent() {
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving && <Spinner />}
-            Salvar
+            {t("forms.save")}
           </button>
         </div>
       </form>

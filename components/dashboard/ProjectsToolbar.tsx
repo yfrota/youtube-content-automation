@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { SearchIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/context";
 import type { ClientProfile } from "@/lib/dashboard/types";
 
 const SEARCH_DEBOUNCE_MS = 400;
 
-const SORT_OPTIONS: { value: string; label: string }[] = [
-  { value: "updated_at:desc", label: "Mais recentes" },
-  { value: "created_at:asc", label: "Mais antigos" },
-  { value: "name:asc", label: "Nome A→Z" },
-  { value: "deadline:asc", label: "Prazo" },
-  { value: "priority:desc", label: "Prioridade" },
+// labelKey, not label — this array is a module const and can't call
+// useT() itself, same pattern as navItems.tsx/CONTENT_TYPE_OPTIONS.
+const SORT_OPTIONS: { value: string; labelKey: string }[] = [
+  { value: "updated_at:desc", labelKey: "dashboard.mostRecent" },
+  { value: "created_at:asc", labelKey: "dashboard.oldest" },
+  { value: "name:asc", labelKey: "dashboard.nameAZ" },
+  { value: "deadline:asc", labelKey: "dashboard.byDeadline" },
+  { value: "priority:desc", labelKey: "dashboard.byPriority" },
 ];
 
 const INPUT_CLASSES =
@@ -40,6 +43,7 @@ export function ProjectsToolbar({
   sortValue,
   onSortChange,
 }: ProjectsToolbarProps) {
+  const t = useT();
   // Local echo of `search` so typing feels instant; the upward call (which
   // triggers a URL update + refetch) is debounced, same pattern as
   // ScriptStage's YouTube trending search.
@@ -61,7 +65,7 @@ export function ProjectsToolbar({
           type="text"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Buscar projetos..."
+          placeholder={t("dashboard.searchProjects")}
           className={`${INPUT_CLASSES} w-full pl-9`}
         />
       </div>
@@ -71,7 +75,7 @@ export function ProjectsToolbar({
         onChange={(e) => onClientChange(e.target.value)}
         className={`${INPUT_CLASSES} sm:w-44`}
       >
-        <option value="">Todos os clientes</option>
+        <option value="">{t("dashboard.allClients")}</option>
         {clients.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
@@ -83,7 +87,7 @@ export function ProjectsToolbar({
         type="text"
         value={tag}
         onChange={(e) => onTagChange(e.target.value)}
-        placeholder="Filtrar por tag..."
+        placeholder={t("dashboard.filterByTag")}
         className={`${INPUT_CLASSES} sm:w-40`}
       />
 
@@ -94,7 +98,7 @@ export function ProjectsToolbar({
       >
         {SORT_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>
-            {opt.label}
+            {t(opt.labelKey)}
           </option>
         ))}
       </select>

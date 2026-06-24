@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Modal } from "./Modal";
 import { useToast } from "./toast";
+import { useT } from "@/lib/i18n/context";
 import type { Priority, Project } from "@/lib/dashboard/types";
 import { PRIORITY_LABELS } from "@/lib/dashboard/types";
 
@@ -24,6 +25,7 @@ export function EditProjectModal({
   }) => void;
 }) {
   const { showToast } = useToast();
+  const t = useT();
   const [title, setTitle] = useState(project.title);
   const [priority, setPriority] = useState<Priority>(project.priority);
   const [deadline, setDeadline] = useState(project.deadline ?? "");
@@ -80,7 +82,7 @@ export function EditProjectModal({
   }
 
   return (
-    <Modal title="Editar projeto" onClose={onClose}>
+    <Modal title={t("dashboard.editProject")} onClose={onClose}>
       <div className="flex flex-col gap-4">
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">

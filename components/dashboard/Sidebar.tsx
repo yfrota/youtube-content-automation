@@ -4,11 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { HaloMark } from "@/components/logo";
+import { useT } from "@/lib/i18n/context";
 import { NAV_ITEMS } from "./navItems";
 
 export function Sidebar() {
   const [expanded, setExpanded] = useState(false);
   const pathname = usePathname();
+  const t = useT();
 
   return (
     <aside
@@ -38,7 +40,8 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
-        {NAV_ITEMS.map(({ href, label, Icon }) => {
+        {NAV_ITEMS.map(({ href, labelKey, Icon }) => {
+          const label = t(labelKey);
           const active =
             pathname === href ||
             (href === "/dashboard" && pathname === "/dashboard");

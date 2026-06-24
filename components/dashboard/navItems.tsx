@@ -9,14 +9,17 @@ import {
 
 export interface NavItem {
   href: string;
-  label: string;
+  /** Dotted path into lib/i18n/translations.ts, resolved via useT() at the
+   * render site — kept as a key here since this array isn't itself a
+   * component and can't call hooks. */
+  labelKey: string;
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", Icon: DashboardIcon },
-  { href: "/clients", label: "Clientes", Icon: UsersIcon },
-  { href: "/projects", label: "Projetos", Icon: FolderIcon },
-  { href: "/analytics", label: "Análises", Icon: ChartIcon },
-  { href: "/settings", label: "Configurações", Icon: SettingsIcon },
+  { href: "/dashboard", labelKey: "nav.dashboard", Icon: DashboardIcon },
+  { href: "/clients", labelKey: "nav.clients", Icon: UsersIcon },
+  { href: "/projects", labelKey: "nav.projects", Icon: FolderIcon },
+  { href: "/analytics", labelKey: "nav.analytics", Icon: ChartIcon },
+  { href: "/settings", labelKey: "nav.settings", Icon: SettingsIcon },
 ];

@@ -10,6 +10,7 @@ import { PipelineStage, type StageState } from "@/components/project-detail/Pipe
 import { ScriptStage } from "@/components/project-detail/ScriptStage";
 import { SeoStage } from "@/components/project-detail/SeoStage";
 import { LockedStageContent } from "@/components/project-detail/LockedStageContent";
+import { useT } from "@/lib/i18n/context";
 import { relativeTime } from "@/lib/time";
 import {
   PLATFORM_BADGE_STYLES,
@@ -34,9 +35,14 @@ function nextStageState(unlocked: boolean, status: ApprovalStatus): StageState {
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
+  const t = useT();
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generatingScript, setGeneratingScript] = useState(false);
+  // ScriptStage's Estado 2 split view wants more room than max-w-3xl gives
+  // it — its own negative margin only reclaims PipelineStage's padding, it
+  // can't escape this page's max-width, so widen the container itself.
+  const [splitViewActive, setSplitViewActive] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,7 +116,11 @@ export default function ProjectDetailPage() {
   const progress = Math.round((doneCount / 4) * 100);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12 sm:px-8 sm:py-16">
+    <div
+      className={`mx-auto px-6 py-12 transition-[max-width] duration-200 sm:px-8 sm:py-16 ${
+        splitViewActive ? "max-w-6xl" : "max-w-3xl"
+      }`}
+    >
       <Breadcrumb
         items={[
           { label: "Início", href: "/" },
@@ -160,12 +170,12 @@ export default function ProjectDetailPage() {
       <div className="mt-12 flex flex-col">
         <PipelineStage
           index={1}
-          title="Roteiro"
+          title={t("scriptStage.stageTitle")}
           state={scriptStageState(scriptStatus)}
           badge={
             generatingScript ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
-                Gerando...
+                {t("status.generating")}
               </span>
             ) : (
               <StatusBadge status={scriptStatus} />
@@ -181,12 +191,13 @@ export default function ProjectDetailPage() {
             script={project.script}
             onScriptChange={handleScriptChange}
             onGeneratingChange={setGeneratingScript}
+            onSplitViewActive={setSplitViewActive}
           />
         </PipelineStage>
 
         <PipelineStage
           index={2}
-          title="SEO"
+          title={t("seoStage.stageTitle")}
           state={nextStageState(seoUnlocked, seoStatus)}
         >
           {!seoUnlocked || !project.script ? (

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useToast } from "@/components/dashboard/toast";
+import { useT } from "@/lib/i18n/context";
 import type { Language, SeoData } from "@/lib/dashboard/types";
 
 function Spinner() {
@@ -41,6 +42,7 @@ export function SeoStage({
   onSeoChange,
 }: SeoStageProps) {
   const { showToast } = useToast();
+  const t = useT();
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [selectedTitleText, setSelectedTitleText] = useState<string | null>(
@@ -146,7 +148,7 @@ export function SeoStage({
     return (
       <div className="flex flex-col gap-4">
         <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-950/50 dark:text-green-300">
-          ✓ SEO Aprovado
+          ✓ {t("seoStage.seoApproved")}
         </span>
 
         {seo.selectedTitle && (
@@ -175,7 +177,7 @@ export function SeoStage({
             disabled={unapproving}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 transition-colors duration-200 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/50"
           >
-            {unapproving && <Spinner />}← Desfazer
+            {unapproving && <Spinner />}← {t("seoStage.undoApproval")}
           </button>
         </div>
       </div>
@@ -209,10 +211,12 @@ export function SeoStage({
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {generating && <Spinner />}
-            Gerar SEO
+            {t("seoStage.generateSeo")}
           </button>
           {generating && (
-            <span className="text-sm text-gray-500 dark:text-gray-400">Gerando SEO...</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {t("seoStage.generatingSeo")}
+            </span>
           )}
         </div>
       </div>
@@ -226,7 +230,7 @@ export function SeoStage({
     <div className="flex flex-col gap-5">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-          Títulos
+          {t("seoStage.titleOptions")}
         </p>
         <div className="mt-2 flex flex-col gap-2">
           {seo.titles.map((title) => {
@@ -247,7 +251,7 @@ export function SeoStage({
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${ctrBadgeStyle(title.ctrScore)}`}
                   >
-                    CTR {title.ctrScore}
+                    {t("seoStage.ctrScore")} {title.ctrScore}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{title.reasoning}</p>
@@ -259,7 +263,7 @@ export function SeoStage({
 
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-          Descrição
+          {t("seoStage.description")}
         </p>
         <p
           className={`mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 ${
@@ -277,7 +281,7 @@ export function SeoStage({
             {descriptionExpanded ? "Recolher" : "Ver completo"}
           </button>
           <span className="text-xs text-gray-400 dark:text-gray-500">
-            {descriptionLength} caracteres (meta: 500-800)
+            {descriptionLength} {t("seoStage.charCount")} (meta: 500-800)
           </span>
         </div>
       </div>
@@ -285,7 +289,7 @@ export function SeoStage({
       {seo.tags.length > 0 && (
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-            Tags ({seo.tags.length})
+            {t("seoStage.tags")} ({seo.tags.length})
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {seo.tags.map((tag) => (
@@ -303,7 +307,7 @@ export function SeoStage({
       {seo.hashtags.length > 0 && (
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-            Hashtags
+            {t("seoStage.hashtags")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {seo.hashtags.map((tag) => (
@@ -330,7 +334,7 @@ export function SeoStage({
           className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-200 px-4 text-sm font-medium text-gray-600 transition-colors duration-200 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/50"
         >
           {generating && <Spinner />}
-          Regenerar
+          {t("seoStage.regenerate")}
         </button>
         <button
           type="button"
@@ -339,7 +343,7 @@ export function SeoStage({
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {approving && <Spinner />}
-          Aprovar SEO
+          {t("seoStage.approveSeo")}
         </button>
       </div>
     </div>

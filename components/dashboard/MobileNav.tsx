@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useT } from "@/lib/i18n/context";
 import { NAV_ITEMS } from "./navItems";
 
 export function MobileNav() {
   const pathname = usePathname();
+  const t = useT();
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-gray-100 bg-background/90 backdrop-blur-md md:hidden dark:border-gray-800/80">
-      {NAV_ITEMS.map(({ href, label, Icon }) => {
+      {NAV_ITEMS.map(({ href, labelKey, Icon }) => {
         const active = pathname === href;
         return (
           <Link
@@ -22,7 +24,7 @@ export function MobileNav() {
             }`}
           >
             <Icon className="h-5 w-5" />
-            <span className="text-[10px] font-medium">{label}</span>
+            <span className="text-[10px] font-medium">{t(labelKey)}</span>
           </Link>
         );
       })}
