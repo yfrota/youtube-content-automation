@@ -4,9 +4,9 @@ import type { ApprovalStatus, PipelineModule, Priority, Project } from "@/lib/da
 import { toClientProfile } from "@/lib/dashboard/types";
 
 // TODO(auth): replace with the authenticated user's client_id once Supabase
-// Auth + tenant membership exists (see docs/rls-policies.md). Until then
-// every dashboard request reads this one fixed client unless ?clientId= is
-// passed explicitly.
+// Auth + tenant membership exists (see docs/rls-policies.md). Only used as
+// POST's fallback now — GET (the list) has no single-client default, see
+// its own comment below.
 const DEV_CLIENT_ID = process.env.DEV_CLIENT_ID;
 
 const CLIENT_SELECT = "id, name, image_url, description, contact_email, phone, created_at, updated_at";
@@ -67,12 +67,22 @@ function latestStatusByProject(rows: DatedStatusRow[]): Map<string, ApprovalStat
 
 // TODO(auth): protect this route once Supabase Auth + tenant membership
 // exists (see docs/rls-policies.md).
+//
+// clientId semantics: a specific id scopes to that one client (unchanged).
+// Omitted or the literal "all" lists across every client — the clients
+// pages and the dashboard's "Por cliente" grouping both need this, and
+// "all" disambiguates an explicit choice from "caller didn't pass the
+// param" (DashboardContent always sends one or the other, never omits it).
+// DEV_CLIENT_ID is NOT used as the default here — that's a behavior change:
+// previously omitting clientId silently meant DEV_CLIENT_ID. Single-resource
+// routes (POST here, GET/PATCH/DELETE on /[id]) still default to it; a list
+// endpoint defaulting to "show one hidden tenant's data" never made sense
+// once real client management existed.
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const clientId = url.searchParams.get("clientId") ?? DEV_CLIENT_ID;
-  if (!clientId) {
-    return NextResponse.json({ error: "Missing DEV_CLIENT_ID" }, { status: 500 });
-  }
+  const clientIdParam = url.searchParams.get("clientId");
+  const allClients = !clientIdParam || clientIdParam === "all";
+  const clientId = allClients ? null : clientIdParam;
 
   const sortParam = url.searchParams.get("sort");
   const sort: SortKey = (SORT_COLUMNS as readonly string[]).includes(sortParam ?? "")
@@ -84,29 +94,15 @@ export async function GET(request: Request) {
 
   const supabase = getSupabaseAdmin();
 
-  const { data: client, error: clientError } = await supabase
-    .from("clients")
-    .select(CLIENT_SELECT)
-    .eq("id", clientId)
-    .maybeSingle();
-  if (clientError) {
-    return NextResponse.json({ error: clientError.message }, { status: 500 });
-  }
-  if (!client) {
-    // No client row for this clientId yet — same end state as "no projects".
-    return NextResponse.json({ projects: [] satisfies Project[] });
-  }
-  const clientProfile = toClientProfile(client);
-
   // Only projects actually in production — catalog rows imported by
   // /api/connectors/youtube/index always have external_video_id set.
   let projectsQuery = supabase
     .from("projects")
     .select(
-      "id, title, platform, status, external_channel_id, priority, deadline, tags, created_at, updated_at"
+      "id, title, platform, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
     )
-    .eq("client_id", clientId)
     .is("external_video_id", null);
+  if (clientId) projectsQuery = projectsQuery.eq("client_id", clientId);
   if (q) projectsQuery = projectsQuery.ilike("title", `%${q}%`);
   // supabase-js's .contains() serializes a plain array as a Postgres array
   // literal ({tag}), which is for native array columns — tags is jsonb, so
@@ -133,24 +129,38 @@ export async function GET(request: Request) {
     });
   }
 
+  // Each project carries its own client now (not one shared profile) — the
+  // single-client early-return-on-missing-client check this route used to
+  // have is gone; a client lookup miss here just means that project's
+  // `client` falls back to a minimal placeholder (see clientById.get below),
+  // it doesn't blank the whole response.
+  const distinctClientIds = [...new Set(projects.map((p) => p.client_id))];
+  const { data: clientRows, error: clientsError } = await supabase
+    .from("clients")
+    .select(CLIENT_SELECT)
+    .in("id", distinctClientIds);
+  if (clientsError) {
+    return NextResponse.json({ error: clientsError.message }, { status: 500 });
+  }
+  const clientById = new Map((clientRows ?? []).map((c) => [c.id, toClientProfile(c)]));
+
   const projectIds = projects.map((p) => p.id);
 
+  // project_id already scopes these uniquely — no need to also filter by
+  // client_id (which wouldn't even have a single value in all-clients mode).
   const [scriptsRes, seoRes, thumbnailsRes] = await Promise.all([
     supabase
       .from("scripts")
       .select("project_id, version, created_at, status")
-      .eq("client_id", clientId)
       .not("raw_transcript", "is", null)
       .in("project_id", projectIds),
     supabase
       .from("seo")
       .select("project_id, created_at, status")
-      .eq("client_id", clientId)
       .in("project_id", projectIds),
     supabase
       .from("thumbnails")
       .select("project_id, created_at, status")
-      .eq("client_id", clientId)
       .in("project_id", projectIds),
   ]);
   if (scriptsRes.error) {
@@ -181,7 +191,11 @@ export async function GET(request: Request) {
       id: project.id,
       title: project.title,
       platform: project.platform,
-      client: clientProfile,
+      // Non-null: client_id is `references clients(id) on delete cascade`,
+      // so every project row here has a real client, and distinctClientIds
+      // (built straight from these same rows) is exactly what clientById
+      // was populated from.
+      client: clientById.get(project.client_id)!,
       channelUrl: project.external_channel_id,
       priority: (project.priority ?? "normal") as Priority,
       deadline: project.deadline,

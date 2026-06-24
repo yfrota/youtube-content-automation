@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { PlusIcon } from "@/components/icons";
+import { Avatar } from "@/components/dashboard/Avatar";
 import { Breadcrumb } from "@/components/dashboard/Breadcrumb";
 import { ProjectCard } from "@/components/dashboard/ProjectCard";
 import { ProjectGridSkeleton } from "@/components/dashboard/Skeleton";
@@ -14,6 +15,11 @@ import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { useToast } from "@/components/dashboard/toast";
 import { HaloMark } from "@/components/logo";
 import type { ClientProfile, Project } from "@/lib/dashboard/types";
+
+interface ClientGroup {
+  client: ClientProfile;
+  items: Project[];
+}
 
 export function DashboardContent() {
   const router = useRouter();
@@ -32,6 +38,7 @@ export function DashboardContent() {
   const tag = searchParams.get("tag") ?? "";
   const sort = searchParams.get("sort") ?? "updated_at";
   const order = searchParams.get("order") ?? "desc";
+  const view = searchParams.get("view") === "byClient" ? "byClient" : "flat";
 
   function updateParams(patch: Record<string, string | null>) {
     const next = new URLSearchParams(searchParams.toString());
@@ -67,7 +74,11 @@ export function DashboardContent() {
       try {
         const qs = new URLSearchParams();
         if (search) qs.set("q", search);
-        if (clientIdFilter) qs.set("clientId", clientIdFilter);
+        // Always send clientId — an empty toolbar filter means "all
+        // clients" now (the API's actual default), distinct from "caller
+        // didn't pass the param" (which the API can't tell apart from this
+        // otherwise). Needed for "Por cliente" to have more than one group.
+        qs.set("clientId", clientIdFilter || "all");
         if (tag) qs.set("tag", tag);
         qs.set("sort", sort);
         qs.set("order", order);
@@ -125,6 +136,19 @@ export function DashboardContent() {
   const loading = projects === null && error === null;
   const hasActiveFilters = Boolean(search || clientIdFilter || tag);
 
+  // Grouping happens entirely over the already-fetched list — no separate
+  // fetch for "Por cliente", each Project already carries its own `client`.
+  const groupedByClient = useMemo<ClientGroup[]>(() => {
+    if (!projects) return [];
+    const byId = new Map<string, ClientGroup>();
+    for (const project of projects) {
+      const existing = byId.get(project.client.id);
+      if (existing) existing.items.push(project);
+      else byId.set(project.client.id, { client: project.client, items: [project] });
+    }
+    return [...byId.values()].sort((a, b) => a.client.name.localeCompare(b.client.name));
+  }, [projects]);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950/40">
       <div className="mx-auto max-w-5xl px-6 py-12 sm:px-8 sm:py-16">
@@ -148,7 +172,32 @@ export function DashboardContent() {
           </button>
         </header>
 
-        <div className="mt-8">
+        <div className="mt-6 inline-flex rounded-lg border border-gray-200 p-0.5 dark:border-gray-800">
+          <button
+            type="button"
+            onClick={() => updateParams({ view: null })}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 ${
+              view === "flat"
+                ? "bg-accent text-white"
+                : "text-gray-500 hover:text-foreground dark:text-gray-400"
+            }`}
+          >
+            Todos os projetos
+          </button>
+          <button
+            type="button"
+            onClick={() => updateParams({ view: "byClient" })}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 ${
+              view === "byClient"
+                ? "bg-accent text-white"
+                : "text-gray-500 hover:text-foreground dark:text-gray-400"
+            }`}
+          >
+            Por cliente
+          </button>
+        </div>
+
+        <div className="mt-4">
           <ProjectsToolbar
             search={search}
             onSearchChange={(value) => updateParams({ q: value || null })}
@@ -174,6 +223,30 @@ export function DashboardContent() {
                 Não foi possível carregar os projetos.
               </p>
               <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{error}</p>
+            </div>
+          ) : projects && projects.length > 0 && view === "byClient" ? (
+            <div className="animate-fade-in flex flex-col gap-10">
+              {groupedByClient.map(({ client, items }) => (
+                <div key={client.id}>
+                  <div className="mb-4 flex items-center gap-2">
+                    <Avatar name={client.name} imageUrl={client.imageUrl} className="h-7 w-7 text-xs" />
+                    <h3 className="text-sm font-medium text-foreground">{client.name}</h3>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                      {items.length} projeto{items.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+                    {items.map((project) => (
+                      <ProjectCard
+                        key={project.id}
+                        project={project}
+                        onEdit={() => setEditingProject(project)}
+                        onDelete={() => setDeletingProject(project)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : projects && projects.length > 0 ? (
             <div className="grid animate-fade-in grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">

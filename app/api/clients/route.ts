@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { toClientProfile } from "@/lib/dashboard/types";
+import { toClientProfile, type ClientWithProjectsCount } from "@/lib/dashboard/types";
 
 const CLIENT_SELECT = "id, name, image_url, description, contact_email, phone, created_at, updated_at";
 
@@ -28,7 +28,26 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ clients: (data ?? []).map(toClientProfile) });
+  // One aggregate query for every client's project count rather than N+1 —
+  // same total-project-count semantics as GET /api/clients/[id] (no
+  // external_video_id filter, catalog imports count too).
+  const { data: countRows, error: countError } = await supabase
+    .from("projects")
+    .select("client_id");
+  if (countError) {
+    return NextResponse.json({ error: countError.message }, { status: 500 });
+  }
+  const countByClient = new Map<string, number>();
+  for (const row of countRows ?? []) {
+    countByClient.set(row.client_id, (countByClient.get(row.client_id) ?? 0) + 1);
+  }
+
+  const clients: ClientWithProjectsCount[] = (data ?? []).map((row) => ({
+    ...toClientProfile(row),
+    projectsCount: countByClient.get(row.id) ?? 0,
+  }));
+
+  return NextResponse.json({ clients });
 }
 
 // TODO(auth): protect this route once Supabase Auth + tenant membership

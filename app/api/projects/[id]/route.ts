@@ -3,22 +3,23 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Priority, ProjectDetail, ScriptChapter, SeoTitleOption } from "@/lib/dashboard/types";
 import { toClientProfile } from "@/lib/dashboard/types";
 
-// TODO(auth): replace with the authenticated user's client_id once Supabase
-// Auth + tenant membership exists (see docs/rls-policies.md).
-const DEV_CLIENT_ID = process.env.DEV_CLIENT_ID;
-
 const CLIENT_SELECT = "id, name, image_url, description, contact_email, phone, created_at, updated_at";
 
+// TODO(auth): protect this route once Supabase Auth + tenant membership
+// exists (see docs/rls-policies.md).
+//
+// No client_id scoping here (GET/PATCH/DELETE all dropped their old `.eq
+// ("client_id", DEV_CLIENT_ID)` filter) — id is already a unique, sufficient
+// key for a single-resource lookup, and that filter actively broke any
+// project belonging to a client other than DEV_CLIENT_ID once the clients
+// pages made that a real, reachable case (e.g. /clients/[id] linking into
+// one of that client's own projects 404'd with "Project not found" until
+// this was fixed — caught live while verifying the clients feature).
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-
-  if (!DEV_CLIENT_ID) {
-    return NextResponse.json({ error: "Missing DEV_CLIENT_ID" }, { status: 500 });
-  }
-
   const supabase = getSupabaseAdmin();
 
   const { data: project, error: projectError } = await supabase
@@ -27,7 +28,6 @@ export async function GET(
       "id, title, platform, language, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
     )
     .eq("id", id)
-    .eq("client_id", DEV_CLIENT_ID)
     .maybeSingle();
   if (projectError) {
     return NextResponse.json({ error: projectError.message }, { status: 500 });
@@ -135,8 +135,8 @@ export async function GET(
 
 const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
 
-// Card editing (title/priority/deadline/tags) — same scoping as GET, kept
-// to DEV_CLIENT_ID's own projects until real auth lands.
+// Card editing (title/priority/deadline/tags) — no client_id scoping, same
+// reasoning as GET above.
 // TODO(auth): protect this route once Supabase Auth + tenant membership
 // exists (see docs/rls-policies.md).
 export async function PATCH(
@@ -144,10 +144,6 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-
-  if (!DEV_CLIENT_ID) {
-    return NextResponse.json({ error: "Missing DEV_CLIENT_ID" }, { status: 500 });
-  }
 
   const body = await request.json().catch(() => null);
   if (!body) {
@@ -195,7 +191,6 @@ export async function PATCH(
     .from("projects")
     .update(update)
     .eq("id", id)
-    .eq("client_id", DEV_CLIENT_ID)
     .select("id, title, priority, deadline, tags, updated_at")
     .maybeSingle();
   if (error) {
@@ -215,11 +210,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-
-  if (!DEV_CLIENT_ID) {
-    return NextResponse.json({ error: "Missing DEV_CLIENT_ID" }, { status: 500 });
-  }
-
   const supabase = getSupabaseAdmin();
   // projects -> scripts/seo/thumbnails/approval_events is `on delete
   // cascade` (0001) — deleting a project is meant to take its own pipeline
@@ -228,7 +218,6 @@ export async function DELETE(
     .from("projects")
     .delete()
     .eq("id", id)
-    .eq("client_id", DEV_CLIENT_ID)
     .select("id")
     .maybeSingle();
   if (error) {

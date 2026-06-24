@@ -39,6 +39,12 @@ export type ClientProfile = {
   updatedAt: string;
 };
 
+// `projectsCount` is a computed aggregate, not a clients-table column — kept
+// out of ClientProfile itself (same separation GET /api/clients/[id] already
+// established: `{ client: ClientProfile, projectsCount }`) and used by both
+// the clients list (GET /api/clients) and the single-client GET.
+export type ClientWithProjectsCount = ClientProfile & { projectsCount: number };
+
 export type Priority = "low" | "normal" | "high" | "urgent";
 
 // Shared by every route that joins or queries `clients` directly (clients

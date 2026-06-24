@@ -4,6 +4,7 @@ import {
   FolderIcon,
   ChartIcon,
   SettingsIcon,
+  UsersIcon,
 } from "@/components/icons";
 
 export interface NavItem {
@@ -14,6 +15,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", Icon: DashboardIcon },
+  { href: "/clients", label: "Clientes", Icon: UsersIcon },
   { href: "/projects", label: "Projetos", Icon: FolderIcon },
   { href: "/analytics", label: "Análises", Icon: ChartIcon },
   { href: "/settings", label: "Configurações", Icon: SettingsIcon },

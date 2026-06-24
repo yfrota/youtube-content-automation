@@ -70,7 +70,7 @@ export default function ProjectDetailPage() {
   if (error) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-12 sm:px-8 sm:py-16">
-        <Breadcrumb items={[{ label: "Início", href: "/" }, { label: "Dashboard" }]} />
+        <Breadcrumb items={[{ label: "Início", href: "/" }, { label: "Clientes" }]} />
         <div className="mt-10 flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 px-8 py-20 text-center dark:border-gray-800">
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Não foi possível carregar o projeto.
@@ -114,7 +114,8 @@ export default function ProjectDetailPage() {
       <Breadcrumb
         items={[
           { label: "Início", href: "/" },
-          { label: "Dashboard", href: "/dashboard" },
+          { label: "Clientes", href: "/clients" },
+          { label: project.client.name, href: `/clients/${project.client.id}` },
           { label: project.title },
         ]}
       />
