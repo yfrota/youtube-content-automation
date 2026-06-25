@@ -8,6 +8,14 @@ interface YouTubeChannelsListResponse {
   }>;
 }
 
+interface YouTubeChannelsListIdResponse {
+  items?: Array<{ id?: string }>;
+}
+
+interface YouTubeSearchListResponse {
+  items?: Array<{ id?: { channelId?: string } }>;
+}
+
 interface YouTubePlaylistItemsListResponse {
   items?: Array<{ contentDetails?: { videoId?: string } }>;
   nextPageToken?: string;
@@ -42,6 +50,92 @@ async function youtubeFetch<T>(path: string, params: Record<string, string>): Pr
     throw new Error(`YouTube API ${path} failed: ${res.status} ${res.statusText} — ${body}`);
   }
   return res.json() as Promise<T>;
+}
+
+// channels.list's `id` param (used by getUploadsPlaylistId below) only
+// accepts literal Channel IDs — passing a @handle or a full URL silently
+// returns zero items, not an error, so this resolution step is load-bearing
+// even though it's easy to miss while testing with a real Channel ID.
+const CHANNEL_ID_PATTERN = /^UC[\w-]{22}$/;
+
+function extractChannelIdFromUrl(input: string): string | null {
+  const match = input.match(/\/channel\/(UC[\w-]{22})/);
+  return match ? match[1] : null;
+}
+
+function extractHandle(input: string): string | null {
+  // Matches a bare "@handle" or one embedded in a URL path segment
+  // (youtube.com/@handle, optionally followed by /videos, ?query, etc.).
+  const match = input.match(/@([\w.-]+)/);
+  return match ? `@${match[1]}` : null;
+}
+
+function extractLegacyName(input: string): string | null {
+  // Older /c/customname and /user/legacyname URL styles — increasingly
+  // rare now that YouTube has pushed everyone to @handles, but some
+  // channels never migrated.
+  const match = input.match(/\/(?:c|user)\/([\w.-]+)/);
+  return match ? match[1] : null;
+}
+
+async function resolveByHandle(handle: string): Promise<string | null> {
+  const data = await youtubeFetch<YouTubeChannelsListIdResponse>("channels", {
+    part: "id",
+    forHandle: handle,
+  });
+  return data.items?.[0]?.id ?? null;
+}
+
+async function resolveByUsername(username: string): Promise<string | null> {
+  const data = await youtubeFetch<YouTubeChannelsListIdResponse>("channels", {
+    part: "id",
+    forUsername: username,
+  });
+  return data.items?.[0]?.id ?? null;
+}
+
+// Last-resort fallback for /c/ custom URLs that don't match a legacy
+// username — search.list costs 100 quota units (vs. 1 for channels.list),
+// so this only runs when the cheaper forUsername lookup comes up empty.
+async function resolveBySearch(query: string): Promise<string | null> {
+  const data = await youtubeFetch<YouTubeSearchListResponse>("search", {
+    part: "snippet",
+    type: "channel",
+    q: query,
+    maxResults: "1",
+  });
+  return data.items?.[0]?.id?.channelId ?? null;
+}
+
+/** Resolves a Channel ID, @handle, or full youtube.com URL to a canonical
+ * Channel ID (UCxxxx...) — the only format channels.list's `id` param
+ * actually accepts. Throws if nothing resolves. */
+export async function resolveChannelId(input: string): Promise<string> {
+  const trimmed = input.trim();
+
+  if (CHANNEL_ID_PATTERN.test(trimmed)) return trimmed;
+
+  const idFromUrl = extractChannelIdFromUrl(trimmed);
+  if (idFromUrl) return idFromUrl;
+
+  const handle = extractHandle(trimmed);
+  if (handle) {
+    const resolved = await resolveByHandle(handle);
+    if (resolved) return resolved;
+  }
+
+  const legacyName = extractLegacyName(trimmed);
+  if (legacyName) {
+    const viaUsername = await resolveByUsername(legacyName);
+    if (viaUsername) return viaUsername;
+    const viaSearch = await resolveBySearch(legacyName);
+    if (viaSearch) return viaSearch;
+  }
+
+  throw new Error(
+    `Could not resolve YouTube channel identifier "${input}" to a channel ID — ` +
+      "expected a Channel ID (UCxxxx...), a @handle, or a youtube.com URL."
+  );
 }
 
 async function getUploadsPlaylistId(channelId: string): Promise<string | null> {
@@ -99,7 +193,11 @@ async function fetchVideoDetails(videoIds: string[]): Promise<ConnectorVideo[]> 
 export const youtubeConnector: PlatformConnector = {
   platform: "youtube",
   async fetchCatalog({ externalChannelId }: FetchCatalogParams): Promise<ConnectorVideo[]> {
-    const uploadsPlaylistId = await getUploadsPlaylistId(externalChannelId);
+    // No-op if externalChannelId is already canonical (just a regex check,
+    // no extra API call) — callers that already resolved it upstream (see
+    // app/api/connectors/youtube/index/route.ts) don't pay for this twice.
+    const channelId = await resolveChannelId(externalChannelId);
+    const uploadsPlaylistId = await getUploadsPlaylistId(channelId);
     if (!uploadsPlaylistId) return [];
 
     const videoIds = await listAllVideoIds(uploadsPlaylistId);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { youtubeConnector } from "@/lib/connectors/youtube";
+import { resolveChannelId, youtubeConnector } from "@/lib/connectors/youtube";
 import { indexCatalog } from "@/lib/rag/indexer";
 
 // TODO(auth): protect this route once Supabase Auth + tenant membership
@@ -14,9 +14,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const videos = await youtubeConnector.fetchCatalog({
-      externalChannelId: body.externalChannelId,
-    });
+    // Resolved once here so the canonical Channel ID (not whatever format
+    // the caller sent — @handle, full URL, or already a Channel ID) is what
+    // gets passed to fetchCatalog and stored in projects.external_channel_id.
+    // Otherwise re-indexing the same channel under a different input format
+    // would silently store a different external_channel_id each time.
+    const channelId = await resolveChannelId(body.externalChannelId);
+
+    const videos = await youtubeConnector.fetchCatalog({ externalChannelId: channelId });
 
     if (videos.length === 0) {
       return NextResponse.json({ totalVideos: 0, indexed: 0, failed: [] });
@@ -25,7 +30,7 @@ export async function POST(request: Request) {
     const result = await indexCatalog({
       clientId: body.clientId,
       platform: "youtube",
-      externalChannelId: body.externalChannelId,
+      externalChannelId: channelId,
       videos,
     });
 
