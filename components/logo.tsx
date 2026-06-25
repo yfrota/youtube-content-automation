@@ -24,6 +24,60 @@ const PETAL_OFFSET = 42;
 const PETAL_RX = 46;
 const PETAL_RY = 22;
 
+const HALO_LOGO_PETALS = [
+  { angle: 0, color: "#fca5a5" },
+  { angle: 72, color: "#f9a8d4" },
+  { angle: 144, color: "#c4b5fd" },
+  { angle: 216, color: "#6ee7b7" },
+  { angle: 288, color: "#93c5fd" },
+];
+
+export function HaloLogo({ size = 80 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 120 120" width={size} height={size} aria-label="Halo Studio">
+      <defs>
+        {HALO_LOGO_PETALS.map((p, i) => (
+          <radialGradient
+            key={i}
+            id={`halo-logo-g${i}`}
+            cx="60"
+            cy="60"
+            r="55"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0%" stopColor={p.color} stopOpacity="0.9" />
+            <stop offset="100%" stopColor={p.color} stopOpacity="0.2" />
+          </radialGradient>
+        ))}
+      </defs>
+
+      {HALO_LOGO_PETALS.map((p, i) => (
+        <ellipse
+          key={i}
+          cx="60"
+          cy="60"
+          rx="13"
+          ry="26"
+          fill={`url(#halo-logo-g${i})`}
+          transform={`rotate(${p.angle} 60 60) translate(0 -22)`}
+        />
+      ))}
+
+      <circle cx="60" cy="60" r="18" fill="white" opacity="0.9" />
+      <text
+        x="60"
+        y="64"
+        fontSize="8"
+        letterSpacing="1"
+        fill="#9b8ea0"
+        textAnchor="middle"
+      >
+        HALO
+      </text>
+    </svg>
+  );
+}
+
 export function HaloMark({ className, title = "Halo Studio" }: { className?: string; title?: string }) {
   return (
     <svg
