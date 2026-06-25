@@ -112,10 +112,23 @@ function buildYoutubeTutorialPrompt(
   contextBlock: string,
   rawTranscript: string
 ): string {
+  // Same anchoring pattern as buildPodcastVodcastPrompt — without an
+  // explicit word-count target the model summarizes freely, producing
+  // ~218 words for a 2932-word input (observed live with empty RAG).
+  const transcriptWordCount = rawTranscript.trim().split(/\s+/).length;
+  const minWords = Math.round(transcriptWordCount * 0.8);
+  const maxWords = Math.round(transcriptWordCount * 1.2);
+
   return (
     "You are Script Forge, a YouTube script editor. Rewrite the raw transcript below " +
     "into a YouTube-optimized script with a strong opening hook and chapter markers.\n\n" +
     `${LANGUAGE_INSTRUCTIONS[language]}\n\n` +
+    "TAMANHO DO SCRIPT:\n" +
+    `O transcript original tem aproximadamente ${transcriptWordCount} palavras.\n` +
+    "O script final deve ter entre 80% e 120% dessa contagem\n" +
+    `(entre ${minWords} e ${maxWords} palavras).\n` +
+    "NÃO resuma nem condense — reescreva completamente mantendo " +
+    "todo o conteúdo original.\n\n" +
     "RELATED EXISTING VIDEOS FROM THIS CHANNEL'S CATALOG (for cross-referencing — mention " +
     `or link to relevant ones in the script body where natural):\n${contextBlock}\n\n` +
     "When mentioning a previous video from the channel, always use its TITLE — never an " +
@@ -405,6 +418,17 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
       reason: "",
       youtubeUrl: `https://youtube.com/watch?v=${m.externalVideoId}`,
     }));
+
+  // TODO: remove after live-testing confirms content length
+  const contentWords = parsed.content.trim().split(/\s+/).length;
+  const hookWords = parsed.hook.trim().split(/\s+/).length;
+  console.log(
+    `[ScriptForge] finish_reason=${response.choices[0]?.finish_reason} ` +
+      `usage=${JSON.stringify(response.usage)} ` +
+      `transcript=${transcriptWordCount}w max_tokens=${dynamicMaxTokens} ` +
+      `content=${contentWords}w (${parsed.content.length}ch) ` +
+      `hook=${hookWords}w (${parsed.hook.length}ch)`
+  );
 
   const embedding = await embedText(`${parsed.hook}\n\n${parsed.content}`);
 
