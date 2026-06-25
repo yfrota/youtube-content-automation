@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/dashboard/EmptyState";
 import { ProjectCard } from "@/components/dashboard/ProjectCard";
 import { ProjectGridSkeleton } from "@/components/dashboard/Skeleton";
 import { useToast } from "@/components/dashboard/toast";
-import { PencilIcon, PlusIcon, RefreshIcon } from "@/components/icons";
+import { PencilIcon, PlusIcon, RefreshIcon, TrashIcon } from "@/components/icons";
 import type { ClientProfile, Priority, Project } from "@/lib/dashboard/types";
 
 function Spinner() {
@@ -48,6 +48,8 @@ export default function ClientDetailPage() {
 
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [deletingClient, setDeletingClient] = useState(false);
+
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
 
@@ -91,6 +93,26 @@ export default function ClientDetailPage() {
     load();
     return () => controller.abort();
   }, [params.id]);
+
+  // TODO(auth): verificar que usuário tem acesso a este cliente
+  async function handleDeleteClient() {
+    try {
+      const url =
+        projectsCount > 0
+          ? `/api/clients/${params.id}?force=true`
+          : `/api/clients/${params.id}`;
+      const res = await fetch(url, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Falha ao excluir cliente");
+      }
+      router.push("/clients");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Falha ao excluir cliente", "info");
+    } finally {
+      setDeletingClient(false);
+    }
+  }
 
   function handleNewProject() {
     router.push(`/projects/new?clientId=${params.id}`);
@@ -247,6 +269,14 @@ export default function ClientDetailPage() {
               <PencilIcon className="h-3.5 w-3.5" />
               Editar
             </button>
+            <button
+              type="button"
+              onClick={() => setDeletingClient(true)}
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-red-200 px-3 text-sm font-medium text-red-600 transition-colors duration-200 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400 dark:hover:bg-red-900/20"
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+              Excluir cliente
+            </button>
           </div>
           {(indexProgress || indexResult) && (
             <p
@@ -307,6 +337,33 @@ export default function ClientDetailPage() {
           )}
         </div>
       </section>
+
+      {deletingClient && (
+        <ConfirmDialog
+          title="Excluir cliente"
+          message={
+            projectsCount > 0 ? (
+              <span>
+                Este cliente tem{" "}
+                <strong>
+                  {projectsCount} projeto{projectsCount === 1 ? "" : "s"}
+                </strong>{" "}
+                vinculado{projectsCount === 1 ? "" : "s"}.
+                <span className="mt-2 block">
+                  Ao excluir o cliente, todos os projetos, roteiros, SEO e vídeos indexados serão
+                  permanentemente removidos.
+                </span>
+                <span className="mt-2 block">Esta ação não pode ser desfeita.</span>
+              </span>
+            ) : (
+              `Tem certeza que deseja excluir ${client.name}? Esta ação não pode ser desfeita.`
+            )
+          }
+          confirmLabel={projectsCount > 0 ? "Excluir tudo" : "Excluir"}
+          onConfirm={handleDeleteClient}
+          onCancel={() => setDeletingClient(false)}
+        />
+      )}
 
       {editingClient && (
         <EditClientModal

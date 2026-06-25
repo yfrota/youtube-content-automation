@@ -12,7 +12,7 @@ export function ConfirmDialog({
   onCancel,
 }: {
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmLabel?: string;
   onConfirm: () => Promise<void> | void;
   onCancel: () => void;
@@ -29,7 +29,7 @@ export function ConfirmDialog({
 
   return (
     <Modal title={title} onClose={onCancel}>
-      <p className="text-sm text-gray-600 dark:text-gray-300">{message}</p>
+      <div className="text-sm text-gray-600 dark:text-gray-300">{message}</div>
       <div className="mt-6 flex items-center justify-end gap-3">
         <button
           type="button"

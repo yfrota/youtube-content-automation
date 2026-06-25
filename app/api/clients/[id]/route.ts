@@ -99,15 +99,14 @@ export async function PATCH(
 // TODO(auth): protect this route once Supabase Auth + tenant membership
 // exists (see docs/rls-policies.md).
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const force = searchParams.get("force") === "true";
   const supabase = getSupabaseAdmin();
 
-  // clients -> projects is `on delete cascade` (0001) — without this guard,
-  // deleting a client would silently wipe every project/script/seo/
-  // thumbnail/approval_event it owns. Block instead of cascading.
   const { count, error: countError } = await supabase
     .from("projects")
     .select("id", { count: "exact", head: true })
@@ -115,13 +114,28 @@ export async function DELETE(
   if (countError) {
     return NextResponse.json({ error: countError.message }, { status: 500 });
   }
+
   if (count && count > 0) {
-    return NextResponse.json(
-      {
-        error: `Cannot delete client: ${count} project(s) still linked to it. Remove or reassign them first.`,
-      },
-      { status: 400 }
-    );
+    if (!force) {
+      // clients -> projects is `on delete cascade` (0001) — without this guard
+      // a plain delete would silently wipe every project/script/seo/thumbnail/
+      // approval_event the client owns. Require explicit ?force=true.
+      return NextResponse.json(
+        {
+          error: `Cannot delete client: ${count} project(s) still linked to it. Remove or reassign them first.`,
+        },
+        { status: 400 }
+      );
+    }
+    // Cascade manually: delete projects first (scripts/seo/thumbnails/
+    // approval_events cascade from projects via on delete cascade since 0001).
+    const { error: projectsDeleteError } = await supabase
+      .from("projects")
+      .delete()
+      .eq("client_id", id);
+    if (projectsDeleteError) {
+      return NextResponse.json({ error: projectsDeleteError.message }, { status: 500 });
+    }
   }
 
   const { error: deleteError } = await supabase.from("clients").delete().eq("id", id);
