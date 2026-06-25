@@ -20,16 +20,15 @@ const TOOL_NAME = "emit_script";
 // Without an explicit cap, OpenRouter defaults to the model's max output
 // (65535 for this model) and the request gets rejected with a 402 if the
 // account can't afford that many tokens — verified this fails silently
-// otherwise (no warning, just a hard error) during manual testing. Tried
-// raising 8192 -> 16384 for podcast_vodcast's full-episode verbatim scripts
-// (0010/0011) but live testing hit a 402 on THIS account's current credit
-// balance ("requested up to 16384, can only afford 13146") — 16384 is well
-// within the model's own 65535 ceiling, the blocker is account credits, not
-// the model. Lowered further to 10000 (from 12000, then 11000) for extra
-// margin below that observed 13146 ceiling; it'll silently get more
-// headroom as credits are topped up, but raising this constant should be
-// re-verified live first, not assumed safe from the model's ceiling alone.
-const MAX_OUTPUT_TOKENS = 10000;
+// otherwise (no warning, just a hard error) during manual testing. The
+// account's credit balance, not the model's 65535 ceiling, is what actually
+// binds this number, and it moves over time as credits are spent/topped
+// up: observed a 402 ceiling of ~13146 at one low-balance point, then a
+// real ceiling of 11988 at an even lower one, then headroom for 16000 after
+// a $10 top-up. **Don't treat any of these as permanent** — re-verify live
+// against the current balance before changing this constant, the number
+// itself has no stable meaning across sessions.
+const MAX_OUTPUT_TOKENS = 16000;
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
 
@@ -277,7 +276,13 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
       ? matches
           .map(
             (m, i) =>
-              `[${i + 1}] "${m.title}" (similarity ${m.similarity.toFixed(3)})\n${m.content.slice(0, CONTEXT_SNIPPET_CHAR_LIMIT)}`
+              // externalVideoId must be printed here — referenced_video_ids
+              // asks the model to copy "the exact id from the RAG context,"
+              // but before this the context block never actually contained
+              // one, only the bracketed list index. Verified live: the
+              // model was echoing that index ("1", "2") back as if it were
+              // the id, since it was the only id-shaped thing visible to it.
+              `[${i + 1}] "${m.title}" (id: ${m.externalVideoId}, similarity ${m.similarity.toFixed(3)})\n${m.content.slice(0, CONTEXT_SNIPPET_CHAR_LIMIT)}`
           )
           .join("\n\n")
       : "No related existing videos were found in the catalog.";
