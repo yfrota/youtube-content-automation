@@ -77,7 +77,7 @@ export function NewProjectContent() {
   const [clientId, setClientId] = useState(preselectedClientId ?? "");
 
   const [title, setTitle] = useState("");
-  const [contentType, setContentType] = useState<ContentType>("youtube_tutorial");
+  const [contentType, setContentType] = useState<ContentType>("podcast_vodcast");
   const [platform, setPlatform] = useState<PlatformOption>("youtube");
   const [channelUrl, setChannelUrl] = useState("");
   const [language, setLanguage] = useState<"pt-BR" | "en-US">("pt-BR");
