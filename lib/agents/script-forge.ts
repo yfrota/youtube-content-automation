@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { searchCatalog } from "@/lib/rag/search";
+import { searchCatalog, type RagMatch } from "@/lib/rag/search";
 import { embedText } from "@/lib/rag/embeddings";
 import type {
   ContentType,
@@ -24,13 +24,17 @@ const TOOL_NAME = "emit_script";
 // account's credit balance, not the model's 65535 ceiling, is what actually
 // binds this number, and it moves over time as credits are spent/topped
 // up: observed a 402 ceiling of ~13146 at one low-balance point, then a
-// real ceiling of 11988 at an even lower one, then headroom for 16000 after
-// a $10 top-up. **Don't treat any of these as permanent** — re-verify live
-// against the current balance before changing this constant, the number
-// itself has no stable meaning across sessions.
-const MAX_OUTPUT_TOKENS = 16000;
+// real ceiling of 11988 at an even lower one, then headroom for 20000 (see
+// below) after a further top-up. **Don't treat any of these as permanent**
+// — re-verify live against the current balance before changing this
+// constant, the number itself has no stable meaning across sessions.
+const MAX_OUTPUT_TOKENS = 20000;
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
+// Separate, much smaller budget for identifyReferencedVideoIds' own call
+// below — it only ever needs to return a JSON array of ids, never a script.
+const VIDEO_ID_EXTRACTION_MAX_TOKENS = 200;
+const SCRIPT_EXCERPT_CHAR_LIMIT = 2000;
 
 const LANGUAGE_INSTRUCTIONS: Record<Language, string> = {
   "pt-BR": "Escreva o roteiro em português brasileiro.",
@@ -83,24 +87,6 @@ const SCRIPT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
           description:
             "Descrição completa para podcast/YouTube (150-300 palavras) com sinopse, temas e " +
             "referências científicas se houver. Preencher apenas para podcast_vodcast.",
-        },
-        // Added in 0011 — structured cross-reference tracking, built from
-        // whichever RAG matches the model says it actually used (not every
-        // match offered in the prompt's context block).
-        referenced_video_ids: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "IDs dos vídeos do canal que foram referenciados neste script. " +
-            "Use os IDs exatos retornados no contexto RAG. " +
-            "Inclua apenas vídeos que foram realmente mencionados no script.",
-        },
-        referenced_video_reasons: {
-          type: "object",
-          description:
-            "Mapa de videoId → motivo da referência. " +
-            "Ex: { 'abc123': 'mencionado na intro como episódio anterior' }",
-          additionalProperties: { type: "string" },
         },
       },
       required: ["content", "hook", "chapters"],
@@ -265,6 +251,55 @@ function buildPrompt(
     : buildYoutubeTutorialPrompt(language, contextBlock, rawTranscript);
 }
 
+// Moved out of emit_script's own tool schema (where referenced_video_ids/
+// referenced_video_reasons used to live, 0011) into a separate, much
+// cheaper call made *after* the script is already generated. Live-tested
+// with a long real transcript (2793 words): the script came back truncated
+// mid-sentence at ~553 words, well under its own 80%-120% target — the two
+// extra tool properties were competing with the script itself for the same
+// max_tokens budget, and the model was spending part of that budget
+// describing references before it ever finished the script. This call has
+// its own small, separate budget, so it can never eat into the script's.
+async function identifyReferencedVideoIds(
+  scriptContent: string,
+  matches: RagMatch[]
+): Promise<string[]> {
+  if (matches.length === 0) return [];
+
+  const videoList = matches
+    .map((m) => `- "${m.title}" (id: ${m.externalVideoId})`)
+    .join("\n");
+  const prompt =
+    `Given this script:\n${scriptContent.slice(0, SCRIPT_EXCERPT_CHAR_LIMIT)}\n\n` +
+    `And these RAG videos:\n${videoList}\n\n` +
+    "Which video IDs were referenced or would complement this episode? " +
+    "Return ONLY a JSON array of video IDs. No explanation.";
+
+  // Best-effort/non-fatal, same "fail quiet" precedent as the YouTube
+  // trending search — a failure here (network error, malformed response)
+  // should never take down an otherwise-successful script generation.
+  try {
+    const response = await getOpenRouter().chat.completions.create({
+      model: MODEL,
+      max_tokens: VIDEO_ID_EXTRACTION_MAX_TOKENS,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const raw = response.choices[0]?.message?.content ?? "";
+    // Plain free-text completion, not forced tool-use — strip a markdown
+    // code fence if present before parsing. This is the exact failure mode
+    // that made GET /api/scripts/[id]/keywords flaky before it switched to
+    // forced tool-use; not worth that switch here since this call is
+    // already optional and cheap, a defensive strip + empty-array fallback
+    // covers it.
+    const cleaned = raw.replace(/```json\s*|```\s*/g, "").trim();
+    const ids = JSON.parse(cleaned);
+    return Array.isArray(ids) && ids.every((id) => typeof id === "string") ? ids : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptForgeOutput> {
   const { clientId, projectId, platform, rawTranscript, language, contentType } = input;
 
@@ -315,8 +350,6 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
     clip_script?: string;
     cta_line?: string;
     pod_description?: string;
-    referenced_video_ids?: string[];
-    referenced_video_reasons?: Record<string, string>;
   };
   try {
     parsed = JSON.parse(toolCall.function.arguments);
@@ -332,16 +365,22 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
   const ctaLine = parsed.cta_line ?? null;
   const podDescription = parsed.pod_description ?? null;
 
-  // Cross-reference the model's stated ids against the RAG matches it was
-  // actually given — never trust an id verbatim, only ids that genuinely
-  // came from this run's own context block resolve to a real video.
-  const referencedVideos: ReferencedVideo[] = (parsed.referenced_video_ids ?? [])
+  // Separate, lightweight call now that the script itself is done — see
+  // identifyReferencedVideoIds' own comment for why this isn't two extra
+  // emit_script tool properties anymore. Never trust an id verbatim, only
+  // ids that genuinely came from this run's own context block resolve to
+  // a real video.
+  const referencedVideoIds = await identifyReferencedVideoIds(parsed.content, matches);
+  const referencedVideos: ReferencedVideo[] = referencedVideoIds
     .map((id) => matches.find((m) => m.externalVideoId === id))
     .filter((m): m is (typeof matches)[number] => Boolean(m))
     .map((m) => ({
       videoId: m.externalVideoId,
       title: m.title,
-      reason: parsed.referenced_video_reasons?.[m.externalVideoId] ?? "",
+      // Always empty now — identifyReferencedVideoIds only ever asks for
+      // ids, not reasons, to keep that call's own output (and cost)
+      // minimal. ScriptStage's reason line just doesn't render for "".
+      reason: "",
       youtubeUrl: `https://youtube.com/watch?v=${m.externalVideoId}`,
     }));
 
