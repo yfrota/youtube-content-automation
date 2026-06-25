@@ -17,18 +17,6 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 // account with forced tool_choice during manual testing.
 const MODEL = "google/gemini-2.5-flash";
 const TOOL_NAME = "emit_script";
-// Without an explicit cap, OpenRouter defaults to the model's max output
-// (65535 for this model) and the request gets rejected with a 402 if the
-// account can't afford that many tokens — verified this fails silently
-// otherwise (no warning, just a hard error) during manual testing. The
-// account's credit balance, not the model's 65535 ceiling, is what actually
-// binds this number, and it moves over time as credits are spent/topped
-// up: observed a 402 ceiling of ~13146 at one low-balance point, then a
-// real ceiling of 11988 at an even lower one, then headroom for 20000 (see
-// below) after a further top-up. **Don't treat any of these as permanent**
-// — re-verify live against the current balance before changing this
-// constant, the number itself has no stable meaning across sessions.
-const MAX_OUTPUT_TOKENS = 20000;
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
 // Separate, much smaller budget for identifyReferencedVideoIds' own call
@@ -322,9 +310,43 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
           .join("\n\n")
       : "No related existing videos were found in the catalog.";
 
+  // Dynamic instead of a fixed constant — a fixed cap either wastes budget
+  // on short transcripts or starves long ones (live-tested truncation on a
+  // 2793-word transcript is what this replaces, see CLAUDE.md). ~1.3
+  // tokens/word in English, times the prompt's own 120% size ceiling,
+  // times a further 20% buffer for structure/emphasis/the extra
+  // deliverables — BUT this multiplier alone (×1.872) badly under-budgets
+  // in practice: live-tested at 5228 tokens for the 2793-word transcript
+  // (the formula's own output for that input) and it truncated at 79
+  // words, the exact failure this was supposed to fix. The model evidently
+  // burns real budget on something not reflected in transcript word count
+  // (plausibly hidden reasoning tokens, scaling with prompt complexity, not
+  // linearly with word count) — a fixed 20000 had already been verified
+  // live to fully complete this same transcript, so the floor is raised
+  // to 10000 (not 4000) to get closer to that proven-safe number for any
+  // transcript under ~5341 words, where the multiplier alone would still
+  // land below the floor. Ceiling stays 30000 (~10000 output words — the
+  // product's own upper bound, not an OpenRouter/account limit).
+  const transcriptWordCount = rawTranscript.trim().split(/\s+/).length;
+  const dynamicMaxTokens = Math.min(
+    Math.max(Math.round(transcriptWordCount * 1.3 * 1.2 * 1.2), 10000),
+    30000
+  );
+
   const response = await getOpenRouter().chat.completions.create({
     model: MODEL,
-    max_tokens: MAX_OUTPUT_TOKENS,
+    max_tokens: dynamicMaxTokens,
+    // Live-tested: finish_reason was "tool_calls" (a clean, voluntary stop)
+    // on every run regardless of max_tokens, with completion_tokens used
+    // nowhere near the budget (e.g. 1047-1642 of a 10000 allowance) — the
+    // model itself decides how much to write, with real run-to-run
+    // variance on the *same* input/prompt (45 to 1642 completion tokens
+    // observed across 3 identical calls). Default temperature (unset,
+    // ~1.0) is the standard lever for that kind of sampling variance;
+    // lowered to reduce how often the model undershoots the prompt's own
+    // 80%-120% length target, while staying above 0 so the "calorosa,
+    // filosófica" voice doesn't flatten out.
+    temperature: 0.4,
     tools: [SCRIPT_TOOL],
     // "required" rather than forcing this specific function by name: more
     // broadly supported across the different models OpenRouter proxies to,
