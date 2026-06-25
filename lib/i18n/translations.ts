@@ -54,6 +54,8 @@ export const translations = {
       clipScript: "Script do Clip (30s)",
       ctaFinal: "CTA Final",
       podDescription: "Descrição do Podcast",
+      referencedVideos: "Vídeos referenciados neste episódio",
+      viewOnYoutube: "Ver no YouTube",
     },
     seoStage: {
       stageTitle: "SEO",
@@ -148,6 +150,8 @@ export const translations = {
       clipScript: "Clip Script (30s)",
       ctaFinal: "Final CTA",
       podDescription: "Podcast Description",
+      referencedVideos: "Referenced videos in this episode",
+      viewOnYoutube: "View on YouTube",
     },
     seoStage: {
       stageTitle: "SEO",

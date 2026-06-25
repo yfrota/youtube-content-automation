@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/dashboard/toast";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { ChevronDownIcon, SparklesIcon } from "@/components/icons";
+import { ChevronDownIcon, ExternalLinkIcon, SparklesIcon } from "@/components/icons";
 import { useT } from "@/lib/i18n/context";
 import type { Language, Platform, ScriptDetail } from "@/lib/dashboard/types";
 
@@ -277,6 +277,7 @@ export function ScriptStage({
         clipScript: string | null;
         ctaLine: string | null;
         podDescription: string | null;
+        referencedVideos: ScriptDetail["referencedVideos"];
       };
       onScriptChange({
         id: result.id,
@@ -289,6 +290,7 @@ export function ScriptStage({
         clipScript: result.clipScript,
         ctaLine: result.ctaLine,
         podDescription: result.podDescription,
+        referencedVideos: result.referencedVideos,
         keywordsContext: null,
         createdAt: new Date().toISOString(),
       });
@@ -333,6 +335,7 @@ export function ScriptStage({
         clipScript: string | null;
         ctaLine: string | null;
         podDescription: string | null;
+        referencedVideos: ScriptDetail["referencedVideos"];
       };
       onScriptChange({
         id: result.id,
@@ -345,6 +348,7 @@ export function ScriptStage({
         clipScript: result.clipScript,
         ctaLine: result.ctaLine,
         podDescription: result.podDescription,
+        referencedVideos: result.referencedVideos,
         keywordsContext: null,
         createdAt: new Date().toISOString(),
       });
@@ -597,6 +601,48 @@ export function ScriptStage({
               {script.content}
             </p>
           </div>
+
+          {script.referencedVideos && script.referencedVideos.length > 0 && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                📺 {t("scriptStage.referencedVideos")}
+              </p>
+              <div className="mt-2 flex flex-col gap-2">
+                {script.referencedVideos.map((video) => (
+                  <div
+                    key={video.videoId}
+                    className="flex gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`}
+                      alt={video.title}
+                      width={60}
+                      height={45}
+                      className="h-[45px] w-[60px] shrink-0 rounded object-cover"
+                    />
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <p className="line-clamp-2 text-sm font-medium text-foreground">
+                        {video.title}
+                      </p>
+                      {video.reason && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500">{video.reason}</p>
+                      )}
+                      <a
+                        href={video.youtubeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+                      >
+                        <ExternalLinkIcon className="h-3 w-3" />
+                        {t("scriptStage.viewOnYoutube")}
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {script.clipScript && (
             <CollapsibleDeliverable

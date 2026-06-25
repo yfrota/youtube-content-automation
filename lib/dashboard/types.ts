@@ -99,6 +99,18 @@ export interface ScriptChapter {
   startTime: string;
 }
 
+// Added in 0011 — a catalog video Script Forge says it actually referenced
+// in the generated script (not every RAG match offered, just the ones the
+// model used). `type`, not `interface`, same structural-typing reason as
+// ScriptChapter — this round-trips through the scripts.referenced_videos
+// jsonb column.
+export type ReferencedVideo = {
+  videoId: string;
+  title: string;
+  reason: string;
+  youtubeUrl: string;
+};
+
 export interface ScriptDetail {
   id: string;
   rawTranscript: string | null;
@@ -116,6 +128,10 @@ export interface ScriptDetail {
   // trending + manual additions). Null until "Salvar keywords" or "Aprovar
   // roteiro" persists a selection — see PATCH /api/scripts/[id].
   keywordsContext: string[] | null;
+  // Catalog videos Script Forge referenced in this script (0011) — null for
+  // scripts generated before this existed, empty array when the model
+  // referenced nothing this run.
+  referencedVideos: ReferencedVideo[] | null;
   status: ApprovalStatus;
   createdAt: string;
 }

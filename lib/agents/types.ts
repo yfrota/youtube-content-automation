@@ -31,6 +31,16 @@ export type ScriptChapter = {
   startTime: string; // free-text timestamp label (e.g. "00:00"), not seconds
 };
 
+// Added in 0011 — a catalog video Script Forge actually referenced in the
+// generated script (cross-referenced from the RAG context the model was
+// given, not every RAG match — only ones the model says it used).
+export type ReferencedVideo = {
+  videoId: string;
+  title: string;
+  reason: string;
+  youtubeUrl: string;
+};
+
 export interface ScriptForgeOutput {
   id: string;
   status: "draft";
@@ -44,6 +54,11 @@ export interface ScriptForgeOutput {
   ctaLine: string | null;
   podDescription: string | null;
   crossReferencedProjectIds: string[];
+  // Added in 0011 — the subset of crossReferencedProjectIds' matches the
+  // model actually says it referenced, with its own stated reason per
+  // video. Always an array (never null) — empty when the model referenced
+  // nothing.
+  referencedVideos: ReferencedVideo[];
 }
 
 export interface SeoEngineInput {

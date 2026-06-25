@@ -2,7 +2,14 @@ import OpenAI from "openai";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { searchCatalog } from "@/lib/rag/search";
 import { embedText } from "@/lib/rag/embeddings";
-import type { ContentType, Language, ScriptChapter, ScriptForgeInput, ScriptForgeOutput } from "./types";
+import type {
+  ContentType,
+  Language,
+  ReferencedVideo,
+  ScriptChapter,
+  ScriptForgeInput,
+  ScriptForgeOutput,
+} from "./types";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 // gemini-flash-1.5 was retired from OpenRouter's catalog ("No endpoints
@@ -77,6 +84,24 @@ const SCRIPT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
           description:
             "Descrição completa para podcast/YouTube (150-300 palavras) com sinopse, temas e " +
             "referências científicas se houver. Preencher apenas para podcast_vodcast.",
+        },
+        // Added in 0011 — structured cross-reference tracking, built from
+        // whichever RAG matches the model says it actually used (not every
+        // match offered in the prompt's context block).
+        referenced_video_ids: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "IDs dos vídeos do canal que foram referenciados neste script. " +
+            "Use os IDs exatos retornados no contexto RAG. " +
+            "Inclua apenas vídeos que foram realmente mencionados no script.",
+        },
+        referenced_video_reasons: {
+          type: "object",
+          description:
+            "Mapa de videoId → motivo da referência. " +
+            "Ex: { 'abc123': 'mencionado na intro como episódio anterior' }",
+          additionalProperties: { type: "string" },
         },
       },
       required: ["content", "hook", "chapters"],
@@ -167,6 +192,15 @@ function buildPodcastVodcastPrompt(
     "NÃO resuma nem condense — desenvolva cada seção completamente.\n" +
     "Se uma seção estiver curta, adicione transições, ênfases e\n" +
     "elementos de engajamento para manter o ritmo natural de um podcast.\n\n" +
+    "FIDELIDADE AO CONTEÚDO ORIGINAL — OBRIGATÓRIO:\n" +
+    "Preserve TODOS os argumentos, histórias pessoais, exemplos,\n" +
+    "pesquisas e pontos do transcript original sem exceção.\n" +
+    "Sua função é melhorar a apresentação e o formato — não resumir,\n" +
+    "não condensar, não omitir conteúdo substantivo.\n" +
+    "Se o apresentador conta uma história pessoal específica,\n" +
+    "ela deve aparecer integralmente no script.\n" +
+    "Se menciona um autor ou pesquisa, mantenha a referência.\n" +
+    "Cada argumento do transcript deve ter seu equivalente no script.\n\n" +
     "ESTRUTURA OBRIGATÓRIA (nesta ordem):\n" +
     "1. TEASER HOOK — 2-3 parágrafos antes do intro formal.\n" +
     "   Impactante, filosófico, começa com uma pergunta ou afirmação forte.\n" +
@@ -201,8 +235,17 @@ function buildPodcastVodcastPrompt(
     "Referências a episódios anteriores: use TÍTULO E NÚMERO do episódio,\n" +
     "nunca IDs internos ou códigos.\n\n" +
     `${LANGUAGE_INSTRUCTIONS[language]}\n\n` +
-    "RELATED EXISTING EPISODES FROM THIS SHOW'S CATALOG (for cross-referencing):\n" +
+    "VÍDEOS RELACIONADOS DO CANAL (para cross-reference contextualizado):\n" +
     `${contextBlock}\n\n` +
+    "Para cada vídeo acima:\n" +
+    "- Avalie se o conteúdo complementa o tema deste episódio\n" +
+    "- Se sim, mencione no momento exato do script onde o tema se conecta,\n" +
+    "  não apenas no final\n" +
+    "- Explique a conexão brevemente e naturalmente:\n" +
+    "  ex: 'No episódio [TÍTULO] exploramos [TEMA], e hoje aprofundamos\n" +
+    "  isso ao falar sobre [CONEXÃO COM O TEMA ATUAL]'\n" +
+    "- Use sempre o título completo, nunca IDs ou códigos internos\n" +
+    "- Se nenhum vídeo for relevante, não force referências artificiais\n\n" +
     "ENTREGÁVEIS ADICIONAIS (preencha nos campos extras da tool):\n" +
     "- clip_script: 30 segundos impactantes, pode ser trecho do episódio\n" +
     "- cta_line: 1 frase de CTA final para encerrar\n" +
@@ -267,6 +310,8 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
     clip_script?: string;
     cta_line?: string;
     pod_description?: string;
+    referenced_video_ids?: string[];
+    referenced_video_reasons?: Record<string, string>;
   };
   try {
     parsed = JSON.parse(toolCall.function.arguments);
@@ -281,6 +326,19 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
   const clipScript = parsed.clip_script ?? null;
   const ctaLine = parsed.cta_line ?? null;
   const podDescription = parsed.pod_description ?? null;
+
+  // Cross-reference the model's stated ids against the RAG matches it was
+  // actually given — never trust an id verbatim, only ids that genuinely
+  // came from this run's own context block resolve to a real video.
+  const referencedVideos: ReferencedVideo[] = (parsed.referenced_video_ids ?? [])
+    .map((id) => matches.find((m) => m.externalVideoId === id))
+    .filter((m): m is (typeof matches)[number] => Boolean(m))
+    .map((m) => ({
+      videoId: m.externalVideoId,
+      title: m.title,
+      reason: parsed.referenced_video_reasons?.[m.externalVideoId] ?? "",
+      youtubeUrl: `https://youtube.com/watch?v=${m.externalVideoId}`,
+    }));
 
   const embedding = await embedText(`${parsed.hook}\n\n${parsed.content}`);
 
@@ -299,6 +357,12 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
       clip_script: clipScript,
       cta_line: ctaLine,
       pod_description: podDescription,
+      // Plain array, not JSON.stringify()'d — referenced_videos is jsonb,
+      // and supabase-js/PostgREST serializes JS values for jsonb columns
+      // itself (same pattern chapters/keywords_context already use).
+      // Stringifying here would double-encode it as a JSON string sitting
+      // inside the jsonb column instead of a proper JSON array.
+      referenced_videos: referencedVideos,
       llm_provider: MODEL,
       status: "draft",
       embedding,
@@ -318,5 +382,6 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
     ctaLine,
     podDescription,
     crossReferencedProjectIds: matches.map((m) => m.projectId),
+    referencedVideos,
   };
 }

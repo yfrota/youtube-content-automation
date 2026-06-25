@@ -5,6 +5,11 @@ import { embedText } from "./embeddings";
 export interface RagMatch {
   scriptId: string;
   projectId: string;
+  // The actual YouTube video id — added in 0011 so callers can cross-
+  // reference a model-returned video id against the RAG context it was
+  // given (e.g. script-forge.ts's referenced_video_ids). Guaranteed
+  // non-null by match_scripts' own WHERE clause (catalog videos only).
+  externalVideoId: string;
   // The project's title — match_scripts joins projects for this (see
   // 0007_match_scripts_catalog_titles.sql). Agent prompts must reference
   // videos by this, never by projectId, or the model echoes a raw uuid
@@ -39,6 +44,7 @@ export async function searchCatalog(params: SearchCatalogParams): Promise<RagMat
   return (data ?? []).map((row) => ({
     scriptId: row.id,
     projectId: row.project_id,
+    externalVideoId: row.external_video_id,
     title: row.title,
     content: row.content,
     hook: row.hook,

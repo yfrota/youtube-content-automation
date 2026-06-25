@@ -4,6 +4,7 @@ import type {
   ContentType,
   Priority,
   ProjectDetail,
+  ReferencedVideo,
   ScriptChapter,
   SeoTitleOption,
 } from "@/lib/dashboard/types";
@@ -59,7 +60,7 @@ export async function GET(
   const { data: scripts, error: scriptsError } = await supabase
     .from("scripts")
     .select(
-      "id, raw_transcript, content, hook, chapters, content_type, clip_script, cta_line, pod_description, keywords_context, status, version, created_at"
+      "id, raw_transcript, content, hook, chapters, content_type, clip_script, cta_line, pod_description, keywords_context, referenced_videos, status, version, created_at"
     )
     .eq("project_id", id)
     .not("raw_transcript", "is", null)
@@ -122,6 +123,8 @@ export async function GET(
           podDescription: latestScript.pod_description,
           keywordsContext:
             (latestScript.keywords_context as unknown as string[] | null) ?? null,
+          referencedVideos:
+            (latestScript.referenced_videos as unknown as ReferencedVideo[] | null) ?? null,
           status: latestScript.status,
           createdAt: latestScript.created_at,
         }

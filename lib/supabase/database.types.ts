@@ -107,6 +107,10 @@ type ScriptsRow = {
   clip_script: string | null;
   cta_line: string | null;
   pod_description: string | null;
+  // Added in 0011 — catalog videos Script Forge actually referenced in the
+  // generated script: [{ videoId, title, reason, youtubeUrl }]. Null until
+  // a script with non-empty referenced_video_ids is generated.
+  referenced_videos: Json | null;
   created_at: string;
   updated_at: string;
 };
@@ -214,6 +218,9 @@ export type Database = {
         Returns: Array<{
           id: string;
           project_id: string;
+          // Added in 0011 — guaranteed non-null by match_scripts' own WHERE
+          // clause (only catalog-indexed videos are eligible matches).
+          external_video_id: string;
           title: string;
           content: string;
           hook: string | null;
