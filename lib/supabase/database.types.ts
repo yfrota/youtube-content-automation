@@ -49,6 +49,10 @@ type ClientsRow = {
   image_url: string | null;
   description: string | null;
   phone: string | null;
+  // Added in 0012 — the client's YouTube channel (handle/URL/Channel ID,
+  // resolved by resolveChannelId before indexing), separate from any one
+  // project's external_channel_id since a client isn't 1:1 with a project.
+  channel_url: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -9,7 +9,8 @@ import { toClientProfile } from "@/lib/dashboard/types";
 // its own comment below.
 const DEV_CLIENT_ID = process.env.DEV_CLIENT_ID;
 
-const CLIENT_SELECT = "id, name, image_url, description, contact_email, phone, created_at, updated_at";
+const CLIENT_SELECT =
+  "id, name, image_url, description, contact_email, phone, channel_url, created_at, updated_at";
 
 const SORT_COLUMNS = ["name", "created_at", "updated_at", "deadline", "priority"] as const;
 type SortKey = (typeof SORT_COLUMNS)[number];

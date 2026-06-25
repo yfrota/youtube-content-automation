@@ -31,6 +31,7 @@ export default function NewClientPage() {
   const [phone, setPhone] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [channelUrl, setChannelUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +51,7 @@ export default function NewClientPage() {
           phone: phone.trim() || undefined,
           description: description.trim() || undefined,
           imageUrl: imageUrl.trim() || undefined,
+          channelUrl: channelUrl.trim() || undefined,
         }),
       });
       const body = await res.json();
@@ -147,6 +149,22 @@ export default function NewClientPage() {
               placeholder="https://..."
               className="h-11 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
             />
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              URL do Canal YouTube (opcional)
+            </span>
+            <input
+              type="text"
+              value={channelUrl}
+              onChange={(e) => setChannelUrl(e.target.value)}
+              placeholder="https://www.youtube.com/@seucanal"
+              className="h-11 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
+            />
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              Usado pelo botão &ldquo;Indexar canal&rdquo; na página do cliente.
+            </span>
           </label>
         </div>
 

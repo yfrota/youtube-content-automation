@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { toClientProfile, type ClientWithProjectsCount } from "@/lib/dashboard/types";
 
-const CLIENT_SELECT = "id, name, image_url, description, contact_email, phone, created_at, updated_at";
+const CLIENT_SELECT =
+  "id, name, image_url, description, contact_email, phone, channel_url, created_at, updated_at";
 
 function slugify(name: string): string {
   const base = name
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
     contact_email: body.email ?? null,
     phone: body.phone ?? null,
     image_url: body.imageUrl ?? null,
+    channel_url: body.channelUrl ?? null,
   };
 
   let { data, error } = await supabase.from("clients").insert(insert).select(CLIENT_SELECT).single();

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { toClientProfile } from "@/lib/dashboard/types";
 
-const CLIENT_SELECT = "id, name, image_url, description, contact_email, phone, created_at, updated_at";
+const CLIENT_SELECT =
+  "id, name, image_url, description, contact_email, phone, channel_url, created_at, updated_at";
 
 // TODO(auth): protect this route once Supabase Auth + tenant membership
 // exists (see docs/rls-policies.md).
@@ -60,6 +61,7 @@ export async function PATCH(
     contact_email?: string | null;
     phone?: string | null;
     image_url?: string | null;
+    channel_url?: string | null;
   } = {};
   if (body.name !== undefined) {
     if (typeof body.name !== "string" || !body.name.trim()) {
@@ -71,6 +73,7 @@ export async function PATCH(
   if (body.email !== undefined) update.contact_email = body.email;
   if (body.phone !== undefined) update.phone = body.phone;
   if (body.imageUrl !== undefined) update.image_url = body.imageUrl;
+  if (body.channelUrl !== undefined) update.channel_url = body.channelUrl;
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "No updatable fields provided" }, { status: 400 });

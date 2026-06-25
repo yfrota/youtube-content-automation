@@ -42,6 +42,11 @@ export type ClientProfile = {
   description: string | null;
   email: string | null;
   phone: string | null;
+  // The client's YouTube channel (handle/URL/Channel ID) — added in 0012,
+  // separate from any one project's channelUrl (projects.external_channel_id)
+  // since a client isn't 1:1 with a project. Used by the "Indexar canal"
+  // button on /clients/[id].
+  channelUrl: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -64,6 +69,7 @@ export function toClientProfile(row: {
   description: string | null;
   contact_email: string | null;
   phone: string | null;
+  channel_url: string | null;
   created_at: string;
   updated_at: string;
 }): ClientProfile {
@@ -74,6 +80,7 @@ export function toClientProfile(row: {
     description: row.description,
     email: row.contact_email,
     phone: row.phone,
+    channelUrl: row.channel_url,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

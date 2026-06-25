@@ -20,6 +20,7 @@ export function EditClientModal({
   const [phone, setPhone] = useState(client.phone ?? "");
   const [description, setDescription] = useState(client.description ?? "");
   const [imageUrl, setImageUrl] = useState(client.imageUrl ?? "");
+  const [channelUrl, setChannelUrl] = useState(client.channelUrl ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +38,7 @@ export function EditClientModal({
           phone: phone.trim() || null,
           description: description.trim() || null,
           imageUrl: imageUrl.trim() || null,
+          channelUrl: channelUrl.trim() || null,
         }),
       });
       const body = await res.json();
@@ -111,6 +113,19 @@ export function EditClientModal({
             value={imageUrl}
             onChange={(e) => setImageUrl(e.target.value)}
             placeholder="https://..."
+            className="h-10 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            URL do Canal YouTube
+          </span>
+          <input
+            type="text"
+            value={channelUrl}
+            onChange={(e) => setChannelUrl(e.target.value)}
+            placeholder="https://www.youtube.com/@seucanal"
             className="h-10 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
           />
         </label>

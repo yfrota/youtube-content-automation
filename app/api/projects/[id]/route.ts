@@ -10,7 +10,8 @@ import type {
 } from "@/lib/dashboard/types";
 import { toClientProfile } from "@/lib/dashboard/types";
 
-const CLIENT_SELECT = "id, name, image_url, description, contact_email, phone, created_at, updated_at";
+const CLIENT_SELECT =
+  "id, name, image_url, description, contact_email, phone, channel_url, created_at, updated_at";
 
 // TODO(auth): protect this route once Supabase Auth + tenant membership
 // exists (see docs/rls-policies.md).
