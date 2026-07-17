@@ -298,7 +298,7 @@ export function ThumbnailStage({
         <p className="text-sm text-red-600 dark:text-red-400">{generateError ?? actionError}</p>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={handleGenerate}
@@ -308,11 +308,19 @@ export function ThumbnailStage({
           {generating && <Spinner />}
           Regenerar
         </button>
+        <LLMSelector
+          projectId={projectId}
+          stageKey="thumbnail"
+          value={llmThumbnail}
+          onChange={onLlmThumbnailChange}
+          label="Modelo para thumbnail"
+          compact
+        />
         <button
           type="button"
           onClick={handleApprove}
           disabled={approving || selectedIndex === null}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="ml-auto inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {approving && <Spinner />}
           Aprovar Thumbnail

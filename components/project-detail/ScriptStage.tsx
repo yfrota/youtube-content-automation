@@ -850,15 +850,25 @@ export function ScriptStage({
           {scriptWords} {t("scriptStage.wordCount")}
           {scriptWords === 1 ? "" : "s"}
         </p>
-        <button
-          type="button"
-          onClick={handleRegenerate}
-          disabled={regenerating}
-          className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500 transition-colors duration-200 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400"
-        >
-          {regenerating && <Spinner />}
-          {t("scriptStage.regenerate")} ↺
-        </button>
+        <div className="flex items-center gap-2">
+          <LLMSelector
+            projectId={projectId}
+            stageKey="script"
+            value={llmScript}
+            onChange={onLlmScriptChange}
+            label="Modelo para roteiro"
+            compact
+          />
+          <button
+            type="button"
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500 transition-colors duration-200 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400"
+          >
+            {regenerating && <Spinner />}
+            {t("scriptStage.regenerate")} ↺
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         <div className="flex flex-col gap-5">
@@ -995,10 +1005,18 @@ export function ScriptStage({
   // of a rewritten script.
   const reviewOutputPanel = (
     <div className="flex min-h-[400px] flex-col rounded-lg border border-gray-200 dark:border-gray-800 md:min-h-[500px] md:max-h-[70vh]">
-      <div className="shrink-0 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-accent dark:bg-blue-950/50">
           🔍 Revisão estruturada
         </span>
+        <LLMSelector
+          projectId={projectId}
+          stageKey="script"
+          value={llmScript}
+          onChange={onLlmScriptChange}
+          label="Modelo para roteiro"
+          compact
+        />
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         <div className="flex flex-col gap-3">
