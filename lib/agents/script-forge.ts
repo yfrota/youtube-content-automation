@@ -211,19 +211,25 @@ function buildYoutubeTutorialPrompt(
   // Same anchoring pattern as buildPodcastVodcastPrompt — without an
   // explicit word-count target the model summarizes freely, producing
   // ~218 words for a 2932-word input (observed live with empty RAG).
+  // Widened from 0.8/1.2 to 0.7/1.3 and reworded as a harder, more explicit
+  // directive — GPT-4o wasn't respecting the original instruction (see
+  // buildPodcastVodcastPrompt's own version of this block for the fuller
+  // history on this prompt).
   const transcriptWordCount = rawTranscript.trim().split(/\s+/).length;
-  const minWords = Math.round(transcriptWordCount * 0.8);
-  const maxWords = Math.round(transcriptWordCount * 1.2);
+  const minWords = Math.round(transcriptWordCount * 0.7);
+  const maxWords = Math.round(transcriptWordCount * 1.3);
 
   return (
     "You are Script Forge, a YouTube script editor. Rewrite the raw transcript below " +
     "into a YouTube-optimized script with a strong opening hook and chapter markers.\n\n" +
     `${LANGUAGE_INSTRUCTIONS[language]}\n\n` +
     buildIcpBlock(icpContext) +
-    "TAMANHO DO SCRIPT:\n" +
-    `O transcript original tem aproximadamente ${transcriptWordCount} palavras.\n` +
-    "O script final deve ter entre 80% e 120% dessa contagem\n" +
-    `(entre ${minWords} e ${maxWords} palavras).\n` +
+    "TAMANHO OBRIGATÓRIO — CRÍTICO:\n" +
+    `O transcript original tem ${transcriptWordCount} palavras.\n` +
+    `Seu output DEVE ter entre ${minWords} e ${maxWords} palavras.\n\n` +
+    "ANTES de chamar a tool, conte mentalmente as palavras escritas.\n" +
+    `Se estiver abaixo de ${minWords}, continue escrevendo — não encerre o script.\n` +
+    "Esta regra se aplica independente do modelo sendo usado.\n\n" +
     "NÃO resuma nem condense — reescreva completamente mantendo " +
     "todo o conteúdo original.\n\n" +
     "RELATED EXISTING VIDEOS FROM THIS CHANNEL'S CATALOG (for cross-referencing — mention " +
@@ -250,9 +256,13 @@ function buildPodcastVodcastPrompt(
   // change involved, prompt-only fix — verified live: pre-fix outputs ran
   // well under the source transcript; see CLAUDE.md for the live-tested
   // caveat on short inputs vs. the "desenvolva completamente" sections).
+  // Widened from 0.8/1.2 to 0.7/1.3 and reworded as a harder, more explicit
+  // directive ("TAMANHO OBRIGATÓRIO — CRÍTICO", count-before-calling-the-tool
+  // instruction) — GPT-4o specifically wasn't respecting the original
+  // 80%-120% instruction despite it holding up fine on Gemini.
   const transcriptWordCount = rawTranscript.trim().split(/\s+/).length;
-  const minWords = Math.round(transcriptWordCount * 0.8);
-  const maxWords = Math.round(transcriptWordCount * 1.2);
+  const minWords = Math.round(transcriptWordCount * 0.7);
+  const maxWords = Math.round(transcriptWordCount * 1.3);
   const developFully =
     "   Desenvolva completamente — não use placeholder ou resumo. Escreva\n" +
     "   cada parágrafo como seria falado em voz alta.\n";
@@ -270,10 +280,12 @@ function buildPodcastVodcastPrompt(
     "Gere o SCRIPT COMPLETO VERBATIM — cada palavra que o apresentador\n" +
     "vai falar. NÃO resuma. NÃO encurte. Escreva o episódio inteiro.\n\n" +
     buildIcpBlock(icpContext) +
-    "TAMANHO DO SCRIPT:\n" +
-    `O transcript original tem aproximadamente ${transcriptWordCount} palavras.\n` +
-    "O script final deve ter entre 80% e 120% dessa contagem\n" +
-    `(entre ${minWords} e ${maxWords} palavras).\n` +
+    "TAMANHO OBRIGATÓRIO — CRÍTICO:\n" +
+    `O transcript original tem ${transcriptWordCount} palavras.\n` +
+    `Seu output DEVE ter entre ${minWords} e ${maxWords} palavras.\n\n` +
+    "ANTES de chamar a tool, conte mentalmente as palavras escritas.\n" +
+    `Se estiver abaixo de ${minWords}, continue escrevendo — não encerre o script.\n` +
+    "Esta regra se aplica independente do modelo sendo usado.\n\n" +
     "NÃO resuma nem condense — desenvolva cada seção completamente.\n" +
     "Se uma seção estiver curta, adicione transições, ênfases e\n" +
     "elementos de engajamento para manter o ritmo natural de um podcast.\n\n" +
