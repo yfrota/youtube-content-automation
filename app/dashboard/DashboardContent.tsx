@@ -35,17 +35,22 @@ export function DashboardContent() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
-  // StatsRow's "Vídeos indexados" KPI — not derivable from `projects`
-  // itself (GET /api/projects excludes catalog-imported rows by design),
-  // fetched once from its own small aggregate endpoint.
-  const [indexedVideos, setIndexedVideos] = useState(0);
 
   const search = searchParams.get("q") ?? "";
+  // Shared between ProjectsToolbar's client filter and StatsRow's "Visão"
+  // selector — both read/write this same URL-derived value via the same
+  // handleClientChange below, so picking a client in either one updates
+  // both (and refilters the project cards + KPIs) with no extra sync code.
   const clientIdFilter = searchParams.get("clientId") ?? "";
+  const platform = searchParams.get("platform") ?? "";
   const tag = searchParams.get("tag") ?? "";
   const sort = searchParams.get("sort") ?? "updated_at";
   const order = searchParams.get("order") ?? "desc";
   const view = searchParams.get("view") === "byClient" ? "byClient" : "flat";
+
+  function handleClientChange(value: string) {
+    updateParams({ clientId: value || null });
+  }
 
   function updateParams(patch: Record<string, string | null>) {
     const next = new URLSearchParams(searchParams.toString());
@@ -74,21 +79,6 @@ export function DashboardContent() {
     };
   }, []);
 
-  // Fetched once, same "non-fatal, fail quiet" precedent as the clients
-  // fetch above — StatsRow's card just reads 0 if this fails.
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/dashboard/stats")
-      .then((res) => res.json())
-      .then((body) => {
-        if (!cancelled) setIndexedVideos(body.indexedVideos ?? 0);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   useEffect(() => {
     const controller = new AbortController();
 
@@ -101,6 +91,7 @@ export function DashboardContent() {
         // didn't pass the param" (which the API can't tell apart from this
         // otherwise). Needed for "Por cliente" to have more than one group.
         qs.set("clientId", clientIdFilter || "all");
+        if (platform) qs.set("platform", platform);
         if (tag) qs.set("tag", tag);
         qs.set("sort", sort);
         qs.set("order", order);
@@ -120,7 +111,7 @@ export function DashboardContent() {
 
     load();
     return () => controller.abort();
-  }, [search, clientIdFilter, tag, sort, order]);
+  }, [search, clientIdFilter, platform, tag, sort, order]);
 
   function handleCreate() {
     router.push("/projects/new");
@@ -156,7 +147,7 @@ export function DashboardContent() {
   }
 
   const loading = projects === null && error === null;
-  const hasActiveFilters = Boolean(search || clientIdFilter || tag);
+  const hasActiveFilters = Boolean(search || clientIdFilter || platform || tag);
 
   // Grouping happens entirely over the already-fetched list — no separate
   // fetch for "Por cliente", each Project already carries its own `client`.
@@ -220,7 +211,12 @@ export function DashboardContent() {
         </header>
 
         <div className="mt-8">
-          <StatsRow projects={projects ?? []} indexedVideos={indexedVideos} />
+          <StatsRow
+            projects={projects ?? []}
+            clients={clients}
+            selectedClientId={clientIdFilter}
+            onClientChange={handleClientChange}
+          />
         </div>
 
         <div className="mt-8 inline-flex rounded-lg border border-halo-border bg-halo-surface p-0.5">
@@ -253,8 +249,10 @@ export function DashboardContent() {
             search={search}
             onSearchChange={(value) => updateParams({ q: value || null })}
             clientId={clientIdFilter}
-            onClientChange={(value) => updateParams({ clientId: value || null })}
+            onClientChange={handleClientChange}
             clients={clients}
+            platform={platform}
+            onPlatformChange={(value) => updateParams({ platform: value || null })}
             tag={tag}
             onTagChange={(value) => updateParams({ tag: value || null })}
             sortValue={`${sort}:${order}`}

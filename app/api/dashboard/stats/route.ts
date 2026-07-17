@@ -10,12 +10,21 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 //
 // TODO(auth): protect this route once Supabase Auth + tenant membership
 // exists (see docs/rls-policies.md).
-export async function GET() {
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const clientIdParam = url.searchParams.get("clientId");
+  // "all"/omitted both mean the consolidated (all-clients) count — same
+  // "all" sentinel GET /api/projects already uses for its own clientId.
+  const clientId = clientIdParam && clientIdParam !== "all" ? clientIdParam : null;
+
   const supabase = getSupabaseAdmin();
-  const { count, error } = await supabase
+  let query = supabase
     .from("projects")
     .select("id", { count: "exact", head: true })
     .not("external_video_id", "is", null);
+  if (clientId) query = query.eq("client_id", clientId);
+
+  const { count, error } = await query;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

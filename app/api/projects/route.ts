@@ -22,6 +22,11 @@ const CLIENT_SELECT =
 const SORT_COLUMNS = ["name", "created_at", "updated_at", "deadline", "priority"] as const;
 type SortKey = (typeof SORT_COLUMNS)[number];
 
+const VALID_PLATFORMS = ["youtube", "instagram", "facebook", "linkedin", "spotify", "tiktok"] as const;
+function isValidPlatform(value: string): value is (typeof VALID_PLATFORMS)[number] {
+  return (VALID_PLATFORMS as readonly string[]).includes(value);
+}
+
 // priority is a free-text column (low/normal/high/urgent, see 0008) — sorted
 // by severity rank in application code rather than relying on alphabetical
 // DB ordering, which would put "high" before "low" before "normal".
@@ -99,6 +104,10 @@ export async function GET(request: Request) {
   const ascending = url.searchParams.get("order") === "asc";
   const q = url.searchParams.get("q");
   const tag = url.searchParams.get("tag");
+  // "all"/empty/unrecognized all mean "no platform filter" — same silent-
+  // fallback precedent as `sort` above rather than 400ing on a stray value.
+  const platformParam = url.searchParams.get("platform");
+  const platform = platformParam && isValidPlatform(platformParam) ? platformParam : null;
 
   const supabase = getSupabaseAdmin();
 
@@ -111,6 +120,7 @@ export async function GET(request: Request) {
     )
     .is("external_video_id", null);
   if (clientId) projectsQuery = projectsQuery.eq("client_id", clientId);
+  if (platform) projectsQuery = projectsQuery.eq("platform", platform);
   if (q) projectsQuery = projectsQuery.ilike("title", `%${q}%`);
   // supabase-js's .contains() serializes a plain array as a Postgres array
   // literal ({tag}), which is for native array columns — tags is jsonb, so

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { SearchIcon } from "@/components/icons";
 import { useT } from "@/lib/i18n/context";
-import type { ClientProfile } from "@/lib/dashboard/types";
+import { PLATFORM_LABELS, type ClientProfile, type Platform } from "@/lib/dashboard/types";
 
 const SEARCH_DEBOUNCE_MS = 400;
 
@@ -17,6 +17,17 @@ const SORT_OPTIONS: { value: string; labelKey: string }[] = [
   { value: "priority:desc", labelKey: "dashboard.byPriority" },
 ];
 
+// Explicit order (not PLATFORM_LABELS' own key order) — matches the order
+// requested for this dropdown specifically.
+const PLATFORM_OPTIONS: Platform[] = [
+  "youtube",
+  "instagram",
+  "tiktok",
+  "linkedin",
+  "facebook",
+  "spotify",
+];
+
 const INPUT_CLASSES =
   "h-10 rounded-[10px] border border-halo-border bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent";
 
@@ -26,6 +37,8 @@ interface ProjectsToolbarProps {
   clientId: string;
   onClientChange: (value: string) => void;
   clients: ClientProfile[];
+  platform: string;
+  onPlatformChange: (value: string) => void;
   tag: string;
   onTagChange: (value: string) => void;
   sortValue: string;
@@ -38,6 +51,8 @@ export function ProjectsToolbar({
   clientId,
   onClientChange,
   clients,
+  platform,
+  onPlatformChange,
   tag,
   onTagChange,
   sortValue,
@@ -79,6 +94,19 @@ export function ProjectsToolbar({
         {clients.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
+          </option>
+        ))}
+      </select>
+
+      <select
+        value={platform}
+        onChange={(e) => onPlatformChange(e.target.value)}
+        className={`${INPUT_CLASSES} sm:w-40`}
+      >
+        <option value="">Todas as plataformas</option>
+        {PLATFORM_OPTIONS.map((p) => (
+          <option key={p} value={p}>
+            {PLATFORM_LABELS[p]}
           </option>
         ))}
       </select>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SettingsIcon } from "@/components/icons";
-import { projectProgress, type Project } from "@/lib/dashboard/types";
+import { projectProgress, type ClientProfile, type Project } from "@/lib/dashboard/types";
 
 const STORAGE_KEY = "halo-dashboard-kpis";
 // Native "storage" only fires in *other* tabs — this custom event lets
@@ -167,7 +167,14 @@ function persistSelected(next: KpiId[]) {
 
 interface StatsRowProps {
   projects: Project[];
-  indexedVideos: number;
+  clients: ClientProfile[];
+  // Shared with ProjectsToolbar's own client filter (lifted to
+  // DashboardContent, backed by the `?clientId=` URL param) — this is the
+  // "Visão" selector's synchronization: both controls read/write the exact
+  // same value through the exact same handler, so there's no separate sync
+  // logic to write, the URL is the single source of truth.
+  selectedClientId: string;
+  onClientChange: (value: string) => void;
 }
 
 // 4 KPI cards above the dashboard toolbar (Soft Studio redesign) — which
@@ -176,10 +183,32 @@ interface StatsRowProps {
 // localStorage via useSyncExternalStore (no React state for it at all),
 // same pattern lib/i18n/context.tsx's LocaleProvider uses — avoids the
 // set-state-in-effect hydration dance entirely.
-export function StatsRow({ projects, indexedVideos }: StatsRowProps) {
+export function StatsRow({ projects, clients, selectedClientId, onClientChange }: StatsRowProps) {
   const selected = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // "Vídeos indexados" isn't derivable from `projects` (GET /api/projects
+  // excludes catalog-imported rows by design) — fetched here, not lifted to
+  // DashboardContent, specifically so it can refetch whenever the "Visão"
+  // selector changes without DashboardContent needing to know about it.
+  const [indexedVideos, setIndexedVideos] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const qs = selectedClientId ? `?clientId=${encodeURIComponent(selectedClientId)}` : "";
+    fetch(`/api/dashboard/stats${qs}`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (!cancelled) setIndexedVideos(body.indexedVideos ?? 0);
+      })
+      .catch(() => {
+        // Non-fatal — the KPI card just reads 0 if this fails.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClientId]);
 
   useEffect(() => {
     if (!open) return;
@@ -205,7 +234,25 @@ export function StatsRow({ projects, indexedVideos }: StatsRowProps) {
 
   return (
     <div>
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-2">
+        <label className="flex items-center gap-1.5">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-halo-text-muted">
+            Visão
+          </span>
+          <select
+            value={selectedClientId}
+            onChange={(e) => onClientChange(e.target.value)}
+            className="h-7 rounded-md border border-halo-border bg-halo-surface px-2 text-xs text-halo-text outline-none transition-colors duration-200 focus:border-accent"
+          >
+            <option value="">Todos os clientes</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div ref={containerRef} className="relative">
           <button
             type="button"
