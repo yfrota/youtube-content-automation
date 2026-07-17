@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useToast } from "@/components/dashboard/toast";
+import { LLMSelector } from "@/components/project-detail/LLMSelector";
 import { useT } from "@/lib/i18n/context";
+import { getLLMProviderName } from "@/lib/llm/providers";
 import type { Language, SeoData } from "@/lib/dashboard/types";
 
 function Spinner() {
@@ -31,6 +33,10 @@ interface SeoStageProps {
   keywordsContext: string[] | null;
   seo: SeoData | null;
   onSeoChange: (seo: SeoData) => void;
+  /** Per-stage LLM selection (0014) — persisted on the project, read by
+   * app/api/agents/seo-engine/route.ts instead of a hardcoded model id. */
+  llmSeo: string;
+  onLlmSeoChange: (model: string) => void;
 }
 
 export function SeoStage({
@@ -40,6 +46,8 @@ export function SeoStage({
   keywordsContext,
   seo,
   onSeoChange,
+  llmSeo,
+  onLlmSeoChange,
 }: SeoStageProps) {
   const { showToast } = useToast();
   const t = useT();
@@ -168,6 +176,12 @@ export function SeoStage({
           </div>
         )}
 
+        {seo.llmProvider && (
+          <p className="text-[11px] text-gray-400 dark:text-gray-500">
+            🤖 Powered by {getLLMProviderName(seo.llmProvider)}
+          </p>
+        )}
+
         {actionError && <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>}
 
         <div>
@@ -198,6 +212,14 @@ export function SeoStage({
             Keywords incluídas: {keywordsContext.join(", ")}
           </p>
         )}
+
+        <LLMSelector
+          projectId={projectId}
+          stageKey="seo"
+          value={llmSeo}
+          onChange={onLlmSeoChange}
+          label="Modelo para SEO"
+        />
 
         {generateError && (
           <p className="text-sm text-red-600 dark:text-red-400">{generateError}</p>
@@ -320,6 +342,12 @@ export function SeoStage({
             ))}
           </div>
         </div>
+      )}
+
+      {seo.llmProvider && (
+        <p className="text-[11px] text-gray-400 dark:text-gray-500">
+          🤖 Powered by {getLLMProviderName(seo.llmProvider)}
+        </p>
       )}
 
       {(generateError || actionError) && (

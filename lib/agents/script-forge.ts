@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { searchCatalog, type RagMatch } from "@/lib/rag/search";
 import { embedText } from "@/lib/rag/embeddings";
+import { DEFAULT_LLM } from "@/lib/llm/providers";
 import type {
   ContentType,
   Language,
@@ -183,13 +184,29 @@ function isValidReviewElements(value: unknown): value is ReviewElement[] {
   );
 }
 
+// Audience-profile calibration block (0014, lib/agents/icp-context.ts) —
+// shared by all three prompt builders below (rewrite's two content-type
+// variants + review). Empty string when the client has no ICP configured,
+// so it's a silent no-op in the prompt rather than an empty section header.
+function buildIcpBlock(icpContext: string | undefined): string {
+  if (!icpContext) return "";
+  return (
+    `${icpContext}\n\n` +
+    "Use este perfil para calibrar:\n" +
+    "- A voz e linguagem do script (fala diretamente para essa pessoa)\n" +
+    "- As histórias e exemplos usados (ressoam com os desafios dela)\n" +
+    "- O nível de profundidade emocional e intelectual\n\n"
+  );
+}
+
 // Unchanged from before 0010 — youtube_tutorial and short_form both use
 // this exact prompt, no structural difference between them yet (short_form
 // is "futuro" per the new-project form's own option label).
 function buildYoutubeTutorialPrompt(
   language: Language,
   contextBlock: string,
-  rawTranscript: string
+  rawTranscript: string,
+  icpContext: string | undefined
 ): string {
   // Same anchoring pattern as buildPodcastVodcastPrompt — without an
   // explicit word-count target the model summarizes freely, producing
@@ -202,6 +219,7 @@ function buildYoutubeTutorialPrompt(
     "You are Script Forge, a YouTube script editor. Rewrite the raw transcript below " +
     "into a YouTube-optimized script with a strong opening hook and chapter markers.\n\n" +
     `${LANGUAGE_INSTRUCTIONS[language]}\n\n` +
+    buildIcpBlock(icpContext) +
     "TAMANHO DO SCRIPT:\n" +
     `O transcript original tem aproximadamente ${transcriptWordCount} palavras.\n` +
     "O script final deve ter entre 80% e 120% dessa contagem\n" +
@@ -223,7 +241,8 @@ function buildYoutubeTutorialPrompt(
 function buildPodcastVodcastPrompt(
   language: Language,
   contextBlock: string,
-  rawTranscript: string
+  rawTranscript: string,
+  icpContext: string | undefined
 ): string {
   // Anchors the model's output length to the input's, instead of leaving
   // length unconstrained — without this the model tends to summarize a
@@ -250,6 +269,7 @@ function buildPodcastVodcastPrompt(
     "Você é um roteirista especialista em podcasts e vodcasts.\n" +
     "Gere o SCRIPT COMPLETO VERBATIM — cada palavra que o apresentador\n" +
     "vai falar. NÃO resuma. NÃO encurte. Escreva o episódio inteiro.\n\n" +
+    buildIcpBlock(icpContext) +
     "TAMANHO DO SCRIPT:\n" +
     `O transcript original tem aproximadamente ${transcriptWordCount} palavras.\n` +
     "O script final deve ter entre 80% e 120% dessa contagem\n" +
@@ -336,12 +356,13 @@ function buildPrompt(
   language: Language,
   contextBlock: string,
   rawTranscript: string,
-  contextNote: string | undefined
+  contextNote: string | undefined,
+  icpContext: string | undefined
 ): string {
   const base =
     contentType === "podcast_vodcast"
-      ? buildPodcastVodcastPrompt(language, contextBlock, rawTranscript)
-      : buildYoutubeTutorialPrompt(language, contextBlock, rawTranscript);
+      ? buildPodcastVodcastPrompt(language, contextBlock, rawTranscript, icpContext)
+      : buildYoutubeTutorialPrompt(language, contextBlock, rawTranscript, icpContext);
   return buildContextNoteBlock(contextNote) + base;
 }
 
@@ -354,7 +375,8 @@ function buildReviewPrompt(
   rawTranscript: string,
   contextNote: string | undefined,
   ragContext: string,
-  language: Language
+  language: Language,
+  icpContext: string | undefined
 ): string {
   return (
     buildContextNoteBlock(contextNote) +
@@ -363,6 +385,7 @@ function buildReviewPrompt(
     "estrutura, retenção e qualidade, e retornar apenas anotações.\n\n" +
     `${LANGUAGE_INSTRUCTIONS[language]} (aplica-se apenas ao texto das sugestões — os campos ` +
     "insert.text e flag.suggestion — nunca reescreva o transcript original.)\n\n" +
+    buildIcpBlock(icpContext) +
     "REGRAS ABSOLUTAS DO MODO REVIEW:\n" +
     "- NUNCA reescreva as palavras originais da apresentadora.\n" +
     "- Output APENAS como anotações com marcadores de posição — jamais um script completo.\n" +
@@ -456,8 +479,19 @@ async function identifyReferencedVideoIds(
 }
 
 export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptForgeOutput> {
-  const { clientId, projectId, platform, rawTranscript, language, contentType, outputMode, contextNote } =
-    input;
+  const {
+    clientId,
+    projectId,
+    platform,
+    rawTranscript,
+    language,
+    contentType,
+    outputMode,
+    contextNote,
+    llmProvider,
+    icpContext,
+  } = input;
+  const model = llmProvider ?? DEFAULT_LLM;
 
   const ragQuery = rawTranscript.slice(0, RAG_QUERY_CHAR_LIMIT);
   const matches = await searchCatalog({ clientId, queryText: ragQuery, platform, matchCount: 5 });
@@ -479,7 +513,18 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
       : "No related existing videos were found in the catalog.";
 
   if (outputMode === "review") {
-    return runReviewMode({ clientId, projectId, platform, rawTranscript, language, contentType, contextNote, contextBlock });
+    return runReviewMode({
+      clientId,
+      projectId,
+      platform,
+      rawTranscript,
+      language,
+      contentType,
+      contextNote,
+      contextBlock,
+      model,
+      icpContext,
+    });
   }
 
   // Dynamic instead of a fixed constant — a fixed cap either wastes budget
@@ -506,7 +551,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
   );
 
   const response = await getOpenRouter().chat.completions.create({
-    model: MODEL,
+    model,
     max_tokens: dynamicMaxTokens,
     // Live-tested: finish_reason was "tool_calls" (a clean, voluntary stop)
     // on every run regardless of max_tokens, with completion_tokens used
@@ -527,7 +572,14 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
     messages: [
       {
         role: "user",
-        content: buildPrompt(contentType, language, contextBlock, rawTranscript, contextNote),
+        content: buildPrompt(
+          contentType,
+          language,
+          contextBlock,
+          rawTranscript,
+          contextNote,
+          icpContext
+        ),
       },
     ],
   });
@@ -612,7 +664,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
       // Stringifying here would double-encode it as a JSON string sitting
       // inside the jsonb column instead of a proper JSON array.
       referenced_videos: referencedVideos,
-      llm_provider: MODEL,
+      llm_provider: model,
       status: "draft",
       embedding,
     })
@@ -634,6 +686,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
     crossReferencedProjectIds: matches.map((m) => m.projectId),
     referencedVideos,
     reviewOutput: null,
+    llmProvider: model,
   };
 }
 
@@ -655,12 +708,24 @@ async function runReviewMode(input: {
   contentType: ContentType;
   contextNote: string | undefined;
   contextBlock: string;
+  model: string;
+  icpContext: string | undefined;
 }): Promise<ScriptForgeOutput> {
-  const { clientId, projectId, platform, rawTranscript, language, contentType, contextNote, contextBlock } =
-    input;
+  const {
+    clientId,
+    projectId,
+    platform,
+    rawTranscript,
+    language,
+    contentType,
+    contextNote,
+    contextBlock,
+    model,
+    icpContext,
+  } = input;
 
   const response = await getOpenRouter().chat.completions.create({
-    model: MODEL,
+    model,
     max_tokens: REVIEW_MAX_TOKENS,
     temperature: 0.4,
     tools: [REVIEW_TOOL],
@@ -668,7 +733,7 @@ async function runReviewMode(input: {
     messages: [
       {
         role: "user",
-        content: buildReviewPrompt(rawTranscript, contextNote, contextBlock, language),
+        content: buildReviewPrompt(rawTranscript, contextNote, contextBlock, language, icpContext),
       },
     ],
   });
@@ -711,7 +776,7 @@ async function runReviewMode(input: {
       pod_description: null,
       referenced_videos: [],
       review_output: elements,
-      llm_provider: MODEL,
+      llm_provider: model,
       status: "draft",
       embedding,
     })
@@ -738,5 +803,6 @@ async function runReviewMode(input: {
     crossReferencedProjectIds: [],
     referencedVideos: [],
     reviewOutput: elements,
+    llmProvider: model,
   };
 }

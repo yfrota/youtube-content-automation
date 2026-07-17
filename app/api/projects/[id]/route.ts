@@ -9,8 +9,10 @@ import type {
   ReviewElement,
   ScriptChapter,
   SeoTitleOption,
+  ThumbnailVariation,
 } from "@/lib/dashboard/types";
 import { toClientProfile } from "@/lib/dashboard/types";
+import { LLM_PROVIDERS } from "@/lib/llm/providers";
 
 const CLIENT_SELECT =
   "id, name, image_url, description, contact_email, phone, channel_url, created_at, updated_at";
@@ -35,7 +37,7 @@ export async function GET(
   const { data: project, error: projectError } = await supabase
     .from("projects")
     .select(
-      "id, title, platform, language, content_type, output_mode, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
+      "id, title, platform, language, content_type, output_mode, llm_script, llm_seo, llm_thumbnail, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -63,7 +65,7 @@ export async function GET(
   const { data: scripts, error: scriptsError } = await supabase
     .from("scripts")
     .select(
-      "id, raw_transcript, content, hook, chapters, content_type, clip_script, cta_line, pod_description, keywords_context, referenced_videos, review_output, edited_content, status, version, created_at"
+      "id, raw_transcript, content, hook, chapters, content_type, clip_script, cta_line, pod_description, keywords_context, referenced_videos, review_output, edited_content, llm_provider, status, version, created_at"
     )
     .eq("project_id", id)
     .not("raw_transcript", "is", null)
@@ -88,7 +90,7 @@ export async function GET(
 
   const { data: thumbnailRows, error: thumbnailError } = await supabase
     .from("thumbnails")
-    .select("status, created_at")
+    .select("id, status, variations, selected_variation, llm_provider, created_at")
     .eq("project_id", id)
     .order("created_at", { ascending: false })
     .limit(1);
@@ -98,6 +100,7 @@ export async function GET(
 
   const latestScript = scripts?.[0] ?? null;
   const latestSeo = seoRows?.[0] ?? null;
+  const latestThumbnail = thumbnailRows?.[0] ?? null;
 
   const result: ProjectDetail = {
     id: project.id,
@@ -106,6 +109,9 @@ export async function GET(
     language: project.language,
     contentType: project.content_type as ContentType,
     outputMode: project.output_mode as OutputMode,
+    llmScript: project.llm_script,
+    llmSeo: project.llm_seo,
+    llmThumbnail: project.llm_thumbnail,
     status: project.status,
     client: toClientProfile(clientRow),
     channelUrl: project.external_channel_id,
@@ -131,6 +137,7 @@ export async function GET(
             (latestScript.referenced_videos as unknown as ReferencedVideo[] | null) ?? null,
           reviewOutput: (latestScript.review_output as unknown as ReviewElement[] | null) ?? null,
           editedContent: latestScript.edited_content,
+          llmProvider: latestScript.llm_provider,
           status: latestScript.status,
           createdAt: latestScript.created_at,
         }
@@ -149,7 +156,17 @@ export async function GET(
         }
       : null,
     seoStatus: latestSeo?.status ?? null,
-    thumbnailStatus: thumbnailRows?.[0]?.status ?? null,
+    thumbnailStatus: latestThumbnail?.status ?? null,
+    thumbnail: latestThumbnail
+      ? {
+          id: latestThumbnail.id,
+          status: latestThumbnail.status,
+          variations: (latestThumbnail.variations as unknown as ThumbnailVariation[] | null) ?? [],
+          selectedVariation: latestThumbnail.selected_variation,
+          llmProvider: latestThumbnail.llm_provider,
+          createdAt: latestThumbnail.created_at,
+        }
+      : null,
   };
 
   return NextResponse.json({ project: result });
@@ -157,6 +174,7 @@ export async function GET(
 
 const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
 const VALID_OUTPUT_MODES = ["rewrite", "review"];
+const VALID_LLM_IDS = LLM_PROVIDERS.map((p) => p.id);
 
 // Card editing (title/priority/deadline/tags) — no client_id scoping, same
 // reasoning as GET above.
@@ -182,6 +200,9 @@ export async function PATCH(
     deadline?: string | null;
     tags?: string[];
     output_mode?: string;
+    llm_script?: string;
+    llm_seo?: string;
+    llm_thumbnail?: string;
   } = {};
   if (body.title !== undefined) {
     if (typeof body.title !== "string" || !body.title.trim()) {
@@ -214,6 +235,17 @@ export async function PATCH(
     }
     update.output_mode = body.output_mode;
   }
+  for (const field of ["llm_script", "llm_seo", "llm_thumbnail"] as const) {
+    const value = body[field];
+    if (value === undefined) continue;
+    if (!VALID_LLM_IDS.includes(value)) {
+      return NextResponse.json(
+        { error: `${field} must be one of: ${VALID_LLM_IDS.join(", ")}` },
+        { status: 400 }
+      );
+    }
+    update[field] = value;
+  }
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "No updatable fields provided" }, { status: 400 });
@@ -224,7 +256,7 @@ export async function PATCH(
     .from("projects")
     .update(update)
     .eq("id", id)
-    .select("id, title, priority, deadline, tags, output_mode, updated_at")
+    .select("id, title, priority, deadline, tags, output_mode, llm_script, llm_seo, llm_thumbnail, updated_at")
     .maybeSingle();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Avatar } from "@/components/dashboard/Avatar";
 import { Breadcrumb } from "@/components/dashboard/Breadcrumb";
+import { ClientIcpSection } from "@/components/dashboard/ClientIcpSection";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { EditClientModal } from "@/components/dashboard/EditClientModal";
 import { EditProjectModal } from "@/components/dashboard/EditProjectModal";
@@ -337,6 +338,8 @@ export default function ClientDetailPage() {
           )}
         </div>
       </section>
+
+      <ClientIcpSection client={client} onSaved={(updated) => setClient(updated)} />
 
       {deletingClient && (
         <ConfirmDialog

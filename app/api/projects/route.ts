@@ -107,7 +107,7 @@ export async function GET(request: Request) {
   let projectsQuery = supabase
     .from("projects")
     .select(
-      "id, title, platform, content_type, output_mode, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
+      "id, title, platform, content_type, output_mode, llm_script, llm_seo, llm_thumbnail, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
     )
     .is("external_video_id", null);
   if (clientId) projectsQuery = projectsQuery.eq("client_id", clientId);
@@ -201,6 +201,9 @@ export async function GET(request: Request) {
       platform: project.platform,
       contentType: project.content_type as ContentType,
       outputMode: project.output_mode as OutputMode,
+      llmScript: project.llm_script,
+      llmSeo: project.llm_seo,
+      llmThumbnail: project.llm_thumbnail,
       // Non-null: client_id is `references clients(id) on delete cascade`,
       // so every project row here has a real client, and distinctClientIds
       // (built straight from these same rows) is exactly what clientById

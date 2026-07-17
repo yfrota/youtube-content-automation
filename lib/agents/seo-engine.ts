@@ -47,6 +47,18 @@ function buildKellyDescriptionBlock(): string {
   );
 }
 
+// Audience-profile calibration block (0014, lib/agents/icp-context.ts) —
+// same source as script-forge.ts's own buildIcpBlock, different closing
+// instruction since this agent picks keywords, not voice/structure.
+function buildIcpBlock(icpContext: string | undefined): string {
+  if (!icpContext) return "";
+  return (
+    `\n\n${icpContext}\n` +
+    "Use as palavras, dores e desejos do ICP para escolher keywords que ressoem " +
+    "emocionalmente com esse público.\n"
+  );
+}
+
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const MODEL = "google/gemini-2.5-flash";
 const TOOL_NAME = "emit_seo";
@@ -145,6 +157,7 @@ export async function generateSeo(
     language,
     llmProvider,
     outputMode,
+    icpContext,
   } = input;
   const model = llmProvider ?? MODEL;
 
@@ -169,6 +182,7 @@ export async function generateSeo(
   const chaptersBlock = chapters.map((c) => `${c.startTime} ${c.title}`).join("\n");
 
   const kellyBlock = outputMode === "review" ? buildKellyDescriptionBlock() : "";
+  const icpBlock = buildIcpBlock(icpContext);
 
   const response = await getOpenRouter().chat.completions.create({
     model,
@@ -190,6 +204,7 @@ export async function generateSeo(
           `${contextBlock}` +
           keywordsBlock +
           kellyBlock +
+          icpBlock +
           `\n\nSCRIPT:\n${scriptContent}`,
       },
     ],

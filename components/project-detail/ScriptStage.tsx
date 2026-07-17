@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/dashboard/toast";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { LLMSelector } from "@/components/project-detail/LLMSelector";
 import { ChevronDownIcon, ExternalLinkIcon, SparklesIcon } from "@/components/icons";
 import { useT } from "@/lib/i18n/context";
+import { getLLMProviderName } from "@/lib/llm/providers";
 import type { Language, OutputMode, Platform, ReviewElement, ScriptDetail } from "@/lib/dashboard/types";
 
 function Spinner() {
@@ -205,6 +207,10 @@ interface ScriptStageProps {
    * not per-call, same reasoning as language/contentType. */
   outputMode: OutputMode;
   onOutputModeChange: (mode: OutputMode) => void;
+  /** Per-stage LLM selection (0014) — persisted on the project, read by
+   * app/api/agents/script-forge/route.ts instead of a hardcoded model id. */
+  llmScript: string;
+  onLlmScriptChange: (model: string) => void;
 }
 
 export function ScriptStage({
@@ -217,6 +223,8 @@ export function ScriptStage({
   onSplitViewActive,
   outputMode,
   onOutputModeChange,
+  llmScript,
+  onLlmScriptChange,
 }: ScriptStageProps) {
   const { showToast } = useToast();
   const t = useT();
@@ -419,6 +427,7 @@ export function ScriptStage({
         podDescription: string | null;
         referencedVideos: ScriptDetail["referencedVideos"];
         reviewOutput: ScriptDetail["reviewOutput"];
+        llmProvider: string;
       };
       onScriptChange({
         id: result.id,
@@ -435,6 +444,7 @@ export function ScriptStage({
         reviewOutput: result.reviewOutput,
         editedContent: null,
         keywordsContext: null,
+        llmProvider: result.llmProvider,
         createdAt: new Date().toISOString(),
       });
       showToast(
@@ -525,6 +535,7 @@ export function ScriptStage({
         podDescription: string | null;
         referencedVideos: ScriptDetail["referencedVideos"];
         reviewOutput: ScriptDetail["reviewOutput"];
+        llmProvider: string;
       };
       onScriptChange({
         id: result.id,
@@ -541,6 +552,7 @@ export function ScriptStage({
         reviewOutput: result.reviewOutput,
         editedContent: null,
         keywordsContext: null,
+        llmProvider: result.llmProvider,
         createdAt: new Date().toISOString(),
       });
       showToast(result.reviewOutput ? "Revisão regenerada" : "Roteiro regenerado");
@@ -706,6 +718,14 @@ export function ScriptStage({
 
         {contextNoteBox}
 
+        <LLMSelector
+          projectId={projectId}
+          stageKey="script"
+          value={llmScript}
+          onChange={onLlmScriptChange}
+          label="Modelo para roteiro"
+        />
+
         {generateError && (
           <p className="text-sm text-red-600 dark:text-red-400">{generateError}</p>
         )}
@@ -768,6 +788,12 @@ export function ScriptStage({
               {keywordCount === 1 ? "" : "s"}
             </p>
           </>
+        )}
+
+        {script.llmProvider && (
+          <p className="text-[11px] text-gray-400 dark:text-gray-500">
+            🤖 Powered by {getLLMProviderName(script.llmProvider)}
+          </p>
         )}
 
         {actionError && <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>}
@@ -953,6 +979,12 @@ export function ScriptStage({
               content={script.podDescription}
             />
           )}
+
+          {script.llmProvider && (
+            <p className="text-[11px] text-gray-400 dark:text-gray-500">
+              🤖 Powered by {getLLMProviderName(script.llmProvider)}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -973,6 +1005,11 @@ export function ScriptStage({
           {(script.reviewOutput ?? []).map((element, i) => (
             <ReviewElementCard key={`${element.name}-${i}`} element={element} />
           ))}
+          {script.llmProvider && (
+            <p className="text-[11px] text-gray-400 dark:text-gray-500">
+              🤖 Powered by {getLLMProviderName(script.llmProvider)}
+            </p>
+          )}
         </div>
       </div>
     </div>

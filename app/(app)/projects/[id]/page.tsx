@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { PipelineStage, type StageState } from "@/components/project-detail/PipelineStage";
 import { ScriptStage } from "@/components/project-detail/ScriptStage";
 import { SeoStage } from "@/components/project-detail/SeoStage";
+import { ThumbnailStage } from "@/components/project-detail/ThumbnailStage";
 import { LockedStageContent } from "@/components/project-detail/LockedStageContent";
 import { useT } from "@/lib/i18n/context";
 import { relativeTime } from "@/lib/time";
@@ -20,6 +21,7 @@ import {
   type ProjectDetail,
   type ScriptDetail,
   type SeoData,
+  type ThumbnailData,
 } from "@/lib/dashboard/types";
 
 // Stage 1 stays expanded while still being worked on (draft) or sitting in
@@ -72,6 +74,24 @@ export default function ProjectDetailPage() {
 
   function handleOutputModeChange(outputMode: OutputMode) {
     setProject((prev) => (prev ? { ...prev, outputMode } : prev));
+  }
+
+  function handleLlmScriptChange(llmScript: string) {
+    setProject((prev) => (prev ? { ...prev, llmScript } : prev));
+  }
+
+  function handleLlmSeoChange(llmSeo: string) {
+    setProject((prev) => (prev ? { ...prev, llmSeo } : prev));
+  }
+
+  function handleLlmThumbnailChange(llmThumbnail: string) {
+    setProject((prev) => (prev ? { ...prev, llmThumbnail } : prev));
+  }
+
+  function handleThumbnailChange(thumbnail: ThumbnailData) {
+    setProject((prev) =>
+      prev ? { ...prev, thumbnail, thumbnailStatus: thumbnail.status } : prev
+    );
   }
 
   function handleSeoChange(seo: SeoData) {
@@ -199,6 +219,8 @@ export default function ProjectDetailPage() {
             onSplitViewActive={setSplitViewActive}
             outputMode={project.outputMode}
             onOutputModeChange={handleOutputModeChange}
+            llmScript={project.llmScript}
+            onLlmScriptChange={handleLlmScriptChange}
           />
         </PipelineStage>
 
@@ -217,6 +239,8 @@ export default function ProjectDetailPage() {
               keywordsContext={project.script.keywordsContext}
               seo={project.seo}
               onSeoChange={handleSeoChange}
+              llmSeo={project.llmSeo}
+              onLlmSeoChange={handleLlmSeoChange}
             />
           )}
         </PipelineStage>
@@ -226,7 +250,17 @@ export default function ProjectDetailPage() {
           title="Thumbnail"
           state={nextStageState(thumbnailUnlocked, thumbnailStatus)}
         >
-          <LockedStageContent message="Disponível após aprovar o SEO" />
+          {!thumbnailUnlocked ? (
+            <LockedStageContent message="Disponível após aprovar o SEO" />
+          ) : (
+            <ThumbnailStage
+              projectId={project.id}
+              thumbnail={project.thumbnail ?? null}
+              onThumbnailChange={handleThumbnailChange}
+              llmThumbnail={project.llmThumbnail}
+              onLlmThumbnailChange={handleLlmThumbnailChange}
+            />
+          )}
         </PipelineStage>
 
         <PipelineStage

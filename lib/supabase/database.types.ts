@@ -53,6 +53,19 @@ type ClientsRow = {
   // resolved by resolveChannelId before indexing), separate from any one
   // project's external_channel_id since a client isn't 1:1 with a project.
   channel_url: string | null;
+  // ICP + brand profile, added in 0014 — see lib/dashboard/types.ts's
+  // ClientProfile for the camelCase mapping and why most SELECTs omit these.
+  icp_text: string | null;
+  icp_demographics: string | null;
+  icp_psychographics: string | null;
+  icp_motivations: string | null;
+  icp_fears: string | null;
+  icp_desires: string | null;
+  icp_objections: string | null;
+  icp_stories: string | null;
+  icp_llm_provider: string | null;
+  brand_colors: Json | null;
+  brand_notes: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -79,6 +92,12 @@ type ProjectsRow = {
   // Added in 0013 — same bare-string precedent as content_type/priority
   // above (lib/agents/types.ts's OutputMode is the real constraint).
   output_mode: string;
+  // Added in 0014 — per-stage LLM selection (lib/llm/providers.ts), same
+  // bare-string precedent, defaults to 'google/gemini-2.5-flash' at the DB
+  // level.
+  llm_script: string;
+  llm_seo: string;
+  llm_thumbnail: string;
   created_at: string;
   updated_at: string;
 };
@@ -162,6 +181,18 @@ type ThumbnailsRow = {
   image_storage_path: string | null;
   llm_provider: string | null;
   status: ApprovalStatus;
+  // Added in 0014 — Thumbnail Studio's text-only Stage 3.
+  // variations: [{ headline, subtitle, supportText, visualStyle }]. The four
+  // bare headline/subtitle/support_text/visual_style columns exist per the
+  // migration spec but are unused by the current single-row-per-project
+  // flow (variations holds all 3 candidates; these would only matter for a
+  // future "promote one variation to its own top-level fields" step).
+  headline: string | null;
+  subtitle: string | null;
+  support_text: string | null;
+  visual_style: string | null;
+  variations: Json | null;
+  selected_variation: number | null;
   created_at: string;
   updated_at: string;
 };

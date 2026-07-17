@@ -35,6 +35,15 @@ export interface PipelineModule {
   status: ApprovalStatus;
 }
 
+// One brand color entry (0014) — `type`, not `interface`, same
+// structural-typing reason as ScriptChapter (round-trips through
+// clients.brand_colors jsonb).
+export type BrandColor = {
+  hex: string;
+  name: string;
+  role: string; // e.g. "primary" | "secondary" | "accent" — free text, not an enum
+};
+
 // `type`, not `interface` — same structural-typing reason as ScriptChapter
 // (CLAUDE.md's type gotchas section), even though this doesn't round-trip
 // through a jsonb column directly. email is the clients.contact_email
@@ -52,6 +61,24 @@ export type ClientProfile = {
   // since a client isn't 1:1 with a project. Used by the "Indexar canal"
   // button on /clients/[id].
   channelUrl: string | null;
+  // ICP (0014) — always present as `string | null` on ClientProfile itself
+  // (never undefined; toClientProfile below normalizes), but the ICP
+  // columns are only actually fetched by GET/PATCH /api/clients/[id] — every
+  // other route that builds a ClientProfile (clients list, projects list/
+  // detail joins) omits them from its own SELECT, so those objects report
+  // null here rather than paying for the extra text columns on every list
+  // load. Only /clients/[id] needs to render ICP.
+  icpText: string | null;
+  icpDemographics: string | null;
+  icpPsychographics: string | null;
+  icpMotivations: string | null;
+  icpFears: string | null;
+  icpDesires: string | null;
+  icpObjections: string | null;
+  icpStories: string | null;
+  icpLlmProvider: string | null;
+  brandColors: BrandColor[] | null;
+  brandNotes: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -66,7 +93,12 @@ export type Priority = "low" | "normal" | "high" | "urgent";
 
 // Shared by every route that joins or queries `clients` directly (clients
 // list/detail, the projects list join, project detail) so the
-// contact_email-as-email mapping lives in one place.
+// contact_email-as-email mapping lives in one place. The icp_*/brand_*
+// fields are optional here (unlike the rest of this parameter type) — see
+// ClientProfile's own comment: most callers' SELECT doesn't fetch them, and
+// an optional property lets a narrower row type still satisfy this
+// signature instead of forcing every call site to fetch ICP text blobs it
+// never renders.
 export function toClientProfile(row: {
   id: string;
   name: string;
@@ -75,6 +107,17 @@ export function toClientProfile(row: {
   contact_email: string | null;
   phone: string | null;
   channel_url: string | null;
+  icp_text?: string | null;
+  icp_demographics?: string | null;
+  icp_psychographics?: string | null;
+  icp_motivations?: string | null;
+  icp_fears?: string | null;
+  icp_desires?: string | null;
+  icp_objections?: string | null;
+  icp_stories?: string | null;
+  icp_llm_provider?: string | null;
+  brand_colors?: unknown;
+  brand_notes?: string | null;
   created_at: string;
   updated_at: string;
 }): ClientProfile {
@@ -85,6 +128,17 @@ export function toClientProfile(row: {
     description: row.description,
     email: row.contact_email,
     phone: row.phone,
+    icpText: row.icp_text ?? null,
+    icpDemographics: row.icp_demographics ?? null,
+    icpPsychographics: row.icp_psychographics ?? null,
+    icpMotivations: row.icp_motivations ?? null,
+    icpFears: row.icp_fears ?? null,
+    icpDesires: row.icp_desires ?? null,
+    icpObjections: row.icp_objections ?? null,
+    icpStories: row.icp_stories ?? null,
+    icpLlmProvider: row.icp_llm_provider ?? null,
+    brandColors: (row.brand_colors as BrandColor[] | null | undefined) ?? null,
+    brandNotes: row.brand_notes ?? null,
     channelUrl: row.channel_url,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -97,6 +151,13 @@ export interface Project {
   platform: Platform;
   contentType: ContentType;
   outputMode: OutputMode;
+  // Per-stage LLM selection (0014, lib/llm/providers.ts) — model id string,
+  // never a Postgres enum (same app-layer-only precedent as
+  // priority/contentType/outputMode). Read by each agent route instead of a
+  // hardcoded model id; written by LLMSelector via PATCH /api/projects/[id].
+  llmScript: string;
+  llmSeo: string;
+  llmThumbnail: string;
   client: ClientProfile;
   channelUrl: string | null;
   priority: Priority;
@@ -165,6 +226,10 @@ export interface ScriptDetail {
   // (0013) — null until the user edits it; read sites fall back to
   // `content`.
   editedContent: string | null;
+  // Model id that generated this script (0014) — mirrors scripts.llm_provider,
+  // powers the "Powered by" badge. Null only for scripts generated before
+  // this column existed.
+  llmProvider: string | null;
   status: ApprovalStatus;
   createdAt: string;
 }
@@ -190,6 +255,28 @@ export type SeoData = {
   createdAt: string;
 };
 
+// One Thumbnail Studio text variation (0014) — `type`, not `interface`, same
+// structural-typing reason as ScriptChapter (round-trips through
+// thumbnails.variations jsonb).
+export type ThumbnailVariation = {
+  headline: string;
+  subtitle: string;
+  supportText: string;
+  visualStyle: string;
+};
+
+export type ThumbnailData = {
+  id: string;
+  status: ApprovalStatus;
+  variations: ThumbnailVariation[];
+  // Index into `variations` — null until "Selecionar esta variação" +
+  // "Aprovar Thumbnail" persists a choice, same optional-until-approved
+  // precedent as SeoData.selectedTitle.
+  selectedVariation: number | null;
+  llmProvider: string | null;
+  createdAt: string;
+};
+
 // Shape returned by GET /api/projects/[id] — one project's full pipeline
 // state. `seoStatus`/`thumbnailStatus` are null when no row exists yet
 // (stage not started); `status` is the project's own column, reused as the
@@ -201,6 +288,9 @@ export interface ProjectDetail {
   language: Language;
   contentType: ContentType;
   outputMode: OutputMode;
+  llmScript: string;
+  llmSeo: string;
+  llmThumbnail: string;
   status: ApprovalStatus;
   client: ClientProfile;
   channelUrl: string | null;
@@ -213,6 +303,7 @@ export interface ProjectDetail {
   seo: SeoData | null;
   seoStatus: ApprovalStatus | null;
   thumbnailStatus: ApprovalStatus | null;
+  thumbnail?: ThumbnailData | null;
 }
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {

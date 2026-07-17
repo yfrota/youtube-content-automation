@@ -1,40 +1,32 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { generateSeo } from "@/lib/agents/seo-engine";
+import { generateThumbnailText } from "@/lib/agents/thumbnail-text";
 import { buildIcpContext } from "@/lib/agents/icp-context";
 import { toClientProfile } from "@/lib/dashboard/types";
-import type { OutputMode } from "@/lib/agents/types";
 
 // Single string literal, not `+`-concatenated — see the same note on
 // app/api/clients/[id]/route.ts's CLIENT_SELECT.
 const CLIENT_ICP_SELECT =
   "id, name, image_url, description, contact_email, phone, channel_url, icp_text, icp_demographics, icp_psychographics, icp_motivations, icp_fears, icp_desires, icp_objections, icp_stories, icp_llm_provider, brand_colors, brand_notes, created_at, updated_at";
 
-// Script must have at least cleared internal review before SEO can be
-// generated from it — generating SEO off an unreviewed draft would mean
-// redoing it the moment the script itself changes.
+// Same eligibility gate as SEO Engine's route — thumbnail text is generated
+// off the approved script's own content/hook, regenerating it the moment an
+// unreviewed draft script changes would be wasted work.
 const ELIGIBLE_SCRIPT_STATUSES = ["kelly_review", "client_review", "approved"];
 
 // TODO(auth): protect this route once Supabase Auth + tenant membership
 // exists (see docs/rls-policies.md).
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
-  if (!body?.projectId || !body?.scriptId) {
-    return NextResponse.json(
-      { error: "projectId and scriptId are required" },
-      { status: 400 }
-    );
+  if (!body?.projectId) {
+    return NextResponse.json({ error: "projectId is required" }, { status: 400 });
   }
 
   const supabase = getSupabaseAdmin();
 
-  // client_id comes from the project row, not the body — same reasoning as
-  // script-forge's route: trusting a caller-supplied clientId would let a
-  // mismatched projectId/clientId pair search a different client's RAG
-  // catalog (see CLAUDE.md's RAG client isolation note).
   const { data: project, error: projectError } = await supabase
     .from("projects")
-    .select("client_id, title, platform, language, output_mode, llm_seo")
+    .select("client_id, title, platform, llm_thumbnail")
     .eq("id", body.projectId)
     .maybeSingle();
   if (projectError) {
@@ -45,14 +37,21 @@ export async function POST(request: Request) {
   }
   const clientId = project.client_id;
 
-  const { data: script, error: scriptError } = await supabase
+  // Latest real script for this project — same "version desc, then
+  // created_at desc, raw_transcript not null" precedent as GET
+  // /api/projects/[id] (catalog-imported rows never apply here).
+  const { data: scripts, error: scriptError } = await supabase
     .from("scripts")
-    .select("content, hook, chapters, status, keywords_context")
-    .eq("id", body.scriptId)
-    .maybeSingle();
+    .select("id, content, hook, status")
+    .eq("project_id", body.projectId)
+    .not("raw_transcript", "is", null)
+    .order("version", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
   if (scriptError) {
     return NextResponse.json({ error: scriptError.message }, { status: 500 });
   }
+  const script = scripts?.[0];
   if (!script) {
     return NextResponse.json({ error: "Script not found" }, { status: 404 });
   }
@@ -65,13 +64,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const keywordsContext = Array.isArray(script.keywords_context)
-    ? (script.keywords_context as unknown[]).filter((k): k is string => typeof k === "string")
-    : [];
-
-  // ICP context (0014) — best-effort, same reasoning as script-forge's
-  // route: a missing client lookup just means no audience calibration,
-  // never a blocked generation.
+  // ICP context (0014) — best-effort, same reasoning as script-forge's and
+  // seo-engine's routes: a missing client lookup just means no audience
+  // calibration, never a blocked generation.
   const { data: clientRow } = await supabase
     .from("clients")
     .select(CLIENT_ICP_SELECT)
@@ -80,38 +75,24 @@ export async function POST(request: Request) {
   const icpContext = clientRow ? buildIcpContext(toClientProfile(clientRow)) : "";
 
   try {
-    const result = await generateSeo({
-      clientId,
-      projectId: body.projectId,
-      scriptId: body.scriptId,
+    const result = await generateThumbnailText({
       platform: project.platform,
       projectTitle: project.title,
       scriptContent: script.content,
       hook: script.hook ?? "",
-      chapters: (script.chapters as { title: string; startTime: string }[] | null) ?? [],
-      keywordsContext,
-      language: project.language,
-      // Read from the project row, not the request body — same per-project-
-      // setting precedent as output_mode/language (0014): LLMSelector
-      // persists the choice via PATCH /api/projects/[id] before the
-      // generate button is ever clickable, matching script-forge's route.
-      llmProvider: project.llm_seo,
-      outputMode: project.output_mode as OutputMode,
       icpContext,
+      llmProvider: project.llm_thumbnail,
     });
 
-    const { data: seo, error: upsertError } = await supabase
-      .from("seo")
+    const { data: thumbnail, error: upsertError } = await supabase
+      .from("thumbnails")
       .upsert(
         {
           client_id: clientId,
           project_id: body.projectId,
-          script_id: body.scriptId,
+          script_id: script.id,
           platform: project.platform,
-          titles: result.titles,
-          description: result.description,
-          tags: result.tags,
-          hashtags: result.hashtags,
+          variations: result.variations,
           llm_provider: result.llmProvider,
           status: "draft",
         },
@@ -123,7 +104,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: upsertError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ seo }, { status: 201 });
+    return NextResponse.json({ thumbnail }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });

@@ -35,6 +35,15 @@ export interface ScriptForgeInput {
   // 2" in review mode, or "emphasize the personal story at minute 3" in
   // rewrite mode.
   contextNote?: string;
+  // Which OpenRouter model id to call (0014, lib/llm/providers.ts) — read
+  // from the project's own llm_script column by the route, same "per-project
+  // setting, not caller-overridable" precedent as language/contentType.
+  // Optional only so callers that predate this field don't break; script-
+  // forge.ts itself falls back to DEFAULT_LLM when omitted.
+  llmProvider?: string;
+  // Audience profile context (0014, lib/agents/icp-context.ts) — empty
+  // string when the client has no ICP configured yet.
+  icpContext?: string;
 }
 
 // One checklist-element annotation from review mode (0013) — `type`, not
@@ -89,6 +98,9 @@ export interface ScriptForgeOutput {
   referencedVideos: ReferencedVideo[];
   // Populated only in review mode (0013) — null in rewrite mode.
   reviewOutput: ReviewElement[] | null;
+  // The actual model id used for this generation (0014) — mirrors
+  // scripts.llm_provider, surfaced for the "Powered by" badge.
+  llmProvider: string;
 }
 
 export interface SeoEngineInput {
@@ -109,6 +121,9 @@ export interface SeoEngineInput {
   // Read from the project row (0013) — 'review' switches the description to
   // Kelly's fixed soulSHINE template instead of the free-form description.
   outputMode?: OutputMode;
+  // Audience profile context (0014, lib/agents/icp-context.ts) — empty
+  // string when the client has no ICP configured yet.
+  icpContext?: string;
 }
 
 // `type`, not `interface` — same jsonb-structural-typing reason as
@@ -124,4 +139,32 @@ export interface SeoOutput {
   description: string;
   tags: string[];
   hashtags: string[];
+}
+
+// Thumbnail Studio, text-only (0014, Stage 3) — no clientId/projectId/
+// scriptId here unlike ScriptForgeInput/SeoEngineInput: this agent doesn't
+// do a RAG search, it's a single free-standing generation off the already-
+// approved script. The route persists the result (upsert onConflict
+// project_id), same "agent doesn't touch the DB" split as SeoEngine.
+export interface ThumbnailTextInput {
+  platform: Platform;
+  projectTitle: string;
+  scriptContent: string;
+  hook: string;
+  icpContext?: string;
+  llmProvider?: string;
+}
+
+// `type`, not `interface` — same jsonb-structural-typing reason as
+// ScriptChapter (round-trips through thumbnails.variations).
+export type ThumbnailVariation = {
+  headline: string;
+  subtitle: string;
+  supportText: string;
+  visualStyle: string;
+};
+
+export interface ThumbnailTextOutput {
+  variations: ThumbnailVariation[];
+  llmProvider: string;
 }
