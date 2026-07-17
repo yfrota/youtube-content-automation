@@ -6,6 +6,7 @@ import type {
   ContentType,
   Language,
   ReferencedVideo,
+  ReviewElement,
   ScriptChapter,
   ScriptForgeInput,
   ScriptForgeOutput,
@@ -17,6 +18,7 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 // account with forced tool_choice during manual testing.
 const MODEL = "google/gemini-2.5-flash";
 const TOOL_NAME = "emit_script";
+const REVIEW_TOOL_NAME = "emit_review";
 const RAG_QUERY_CHAR_LIMIT = 4000;
 const CONTEXT_SNIPPET_CHAR_LIMIT = 500;
 // Separate, much smaller budget for identifyReferencedVideoIds' own call
@@ -82,6 +84,69 @@ const SCRIPT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   },
 };
 
+// Review mode's tool (0013) — deliberately no `content` property. The model
+// must never rewrite the transcript here, only annotate it against the
+// 20-element checklist buildReviewPrompt lays out.
+const REVIEW_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: REVIEW_TOOL_NAME,
+    description:
+      "Return the structured review of the transcript against the 20-element checklist — " +
+      "annotations only, never a rewritten script.",
+    parameters: {
+      type: "object",
+      properties: {
+        elements: {
+          type: "array",
+          description: "One entry per checklist element, covering all 20 in checklist order.",
+          items: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "Element name, e.g. 'Hook', 'Roadmap Promise', 'Open Loops'.",
+              },
+              status: {
+                type: "string",
+                enum: ["present", "missing", "flag"],
+              },
+              keep: {
+                type: "string",
+                description:
+                  "Original excerpt that is already present and strong. Only for status=present.",
+              },
+              insert: {
+                type: "object",
+                description: "Suggested addition. Only for status=missing.",
+                properties: {
+                  text: { type: "string", description: "Suggested text, in the show's voice." },
+                  placement: {
+                    type: "string",
+                    description: "Where exactly to insert it, e.g. 'after minute 14'.",
+                  },
+                },
+                required: ["text", "placement"],
+              },
+              flag: {
+                type: "object",
+                description: "Conflict or problem with what's present. Only for status=flag.",
+                properties: {
+                  issue: { type: "string", description: "What's wrong with the current version." },
+                  suggestion: { type: "string", description: "Suggested fix, in the show's voice." },
+                },
+                required: ["issue", "suggestion"],
+              },
+            },
+            required: ["name", "status"],
+          },
+        },
+      },
+      required: ["elements"],
+    },
+  },
+};
+
 let openrouter: OpenAI | null = null;
 function getOpenRouter(): OpenAI {
   if (openrouter) return openrouter;
@@ -101,6 +166,20 @@ function isValidChapters(value: unknown): value is ScriptChapter[] {
         typeof (item as Record<string, unknown>).title === "string" &&
         typeof (item as Record<string, unknown>).startTime === "string"
     )
+  );
+}
+
+function isValidReviewElements(value: unknown): value is ReviewElement[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => {
+      if (typeof item !== "object" || item === null) return false;
+      const r = item as Record<string, unknown>;
+      return (
+        typeof r.name === "string" &&
+        (r.status === "present" || r.status === "missing" || r.status === "flag")
+      );
+    })
   );
 }
 
@@ -241,15 +320,90 @@ function buildPodcastVodcastPrompt(
   );
 }
 
+// Shared by both modes (0013) — a creator-supplied instruction, given top
+// priority over everything else in the prompt when present. Prepended
+// rather than threaded into each builder individually, so both
+// buildYoutubeTutorialPrompt/buildPodcastVodcastPrompt and
+// buildReviewPrompt get it for free.
+function buildContextNoteBlock(contextNote: string | undefined): string {
+  const trimmed = contextNote?.trim();
+  if (!trimmed) return "";
+  return `INSTRUÇÃO DA CRIADORA (prioridade máxima): ${trimmed}\n\n`;
+}
+
 function buildPrompt(
   contentType: ContentType,
   language: Language,
   contextBlock: string,
-  rawTranscript: string
+  rawTranscript: string,
+  contextNote: string | undefined
 ): string {
-  return contentType === "podcast_vodcast"
-    ? buildPodcastVodcastPrompt(language, contextBlock, rawTranscript)
-    : buildYoutubeTutorialPrompt(language, contextBlock, rawTranscript);
+  const base =
+    contentType === "podcast_vodcast"
+      ? buildPodcastVodcastPrompt(language, contextBlock, rawTranscript)
+      : buildYoutubeTutorialPrompt(language, contextBlock, rawTranscript);
+  return buildContextNoteBlock(contextNote) + base;
+}
+
+// Review mode (0013) — instead of rewriting, analyzes the raw transcript
+// against a fixed 20-element structure/retention/quality checklist and
+// returns annotations only. Never touches the creator's own words; see
+// REVIEW_TOOL's own comment for why `content` isn't even a tool property
+// here.
+function buildReviewPrompt(
+  rawTranscript: string,
+  contextNote: string | undefined,
+  ragContext: string,
+  language: Language
+): string {
+  return (
+    buildContextNoteBlock(contextNote) +
+    "Você é um editor de roteiros especialista em podcasts/vodcasts. Sua tarefa NÃO é " +
+    "reescrever o transcript abaixo — é analisá-lo contra um checklist de 20 elementos de " +
+    "estrutura, retenção e qualidade, e retornar apenas anotações.\n\n" +
+    `${LANGUAGE_INSTRUCTIONS[language]} (aplica-se apenas ao texto das sugestões — os campos ` +
+    "insert.text e flag.suggestion — nunca reescreva o transcript original.)\n\n" +
+    "REGRAS ABSOLUTAS DO MODO REVIEW:\n" +
+    "- NUNCA reescreva as palavras originais da apresentadora.\n" +
+    "- Output APENAS como anotações com marcadores de posição — jamais um script completo.\n" +
+    "- Para cada um dos 20 elementos abaixo, classifique como KEEP (presente e forte — aponte " +
+    "o trecho original, sem sugestão), INSERT (ausente — sugira um texto com posição exata de " +
+    "inserção) ou FLAG (presente mas com conflito/problema — descreva o problema e sugira a " +
+    "correção).\n" +
+    "- Sugestões de INSERT e FLAG devem soar como a voz dela — reflective, educational, " +
+    "diretas ao ICP do show.\n" +
+    "- Um elemento presente e forte deve ter APENAS keep preenchido, nunca insert.\n\n" +
+    "SEÇÃO 1 — ESTRUTURA (7 elementos):\n" +
+    "1. Hook (primeiros 15 segundos): abre com pergunta, reframe ou curiosity gap — NÃO " +
+    "warm-up genérico.\n" +
+    "2. Structured Promise (Roadmap): \"First X, then Y, finally Z\" + BIG PROMISE no final " +
+    "do roadmap.\n" +
+    "3. Transições entre seções: conectam o que veio antes, nunca flat (\"Okay, next...\").\n" +
+    "4. Reflection Pause: momento deliberado \"Let that land\".\n" +
+    "5. Subscribe Moment: atrelado a valor, não genérico, após insight significativo.\n" +
+    "6. Call-to-Action: no final E mid-episode.\n" +
+    "7. Referência a episódio anterior: ~30-40% do episódio, 10-15 segundos, link na " +
+    "descrição.\n\n" +
+    "SEÇÃO 2 — RETENÇÃO (8 elementos):\n" +
+    "8. Open Loops: 2-3 por episódio, pergunta plantada cedo respondida tarde.\n" +
+    "9. Pattern Interrupts: a cada 2-3 min, reset verbal (\"But here's what nobody tells " +
+    "you...\").\n" +
+    "10. Mirror \"You\": linguagem direta ao viewer a cada 2-3 min.\n" +
+    "11. Callbacks: referência a algo dito antes no episódio.\n" +
+    "12. Stat surpresa: dado científico inesperado aos 40-50%.\n" +
+    "13. Mid-episode check: ~50%, reconecta ao \"why\" do viewer.\n" +
+    "14. Stakes Escalation: cada seção maior que a anterior.\n" +
+    "15. Permission Pause: \"You don't have to believe this yet. Just sit with it.\"\n\n" +
+    "SEÇÃO 3 — QUALIDADE (5 elementos):\n" +
+    "16. Fillers removidos: sem \"um\", \"uh\", \"you know\", \"sort of\".\n" +
+    "17. Precisão científica: autor, ano, achado corretos.\n" +
+    "18. Keywords SEO: aparecem naturalmente no transcript falado.\n" +
+    "19. Voz natural preservada: conversacional, não palestra.\n" +
+    "20. Cross-references verbais: episódios mencionados falados, não só na descrição.\n\n" +
+    "VÍDEOS RELACIONADOS DO CANAL (relevantes para avaliar os elementos 7 e 20):\n" +
+    `${ragContext}\n\n` +
+    `TRANSCRIPT ORIGINAL:\n${rawTranscript}`
+  );
 }
 
 // Moved out of emit_script's own tool schema (where referenced_video_ids/
@@ -302,7 +456,8 @@ async function identifyReferencedVideoIds(
 }
 
 export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptForgeOutput> {
-  const { clientId, projectId, platform, rawTranscript, language, contentType } = input;
+  const { clientId, projectId, platform, rawTranscript, language, contentType, outputMode, contextNote } =
+    input;
 
   const ragQuery = rawTranscript.slice(0, RAG_QUERY_CHAR_LIMIT);
   const matches = await searchCatalog({ clientId, queryText: ragQuery, platform, matchCount: 5 });
@@ -322,6 +477,10 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
           )
           .join("\n\n")
       : "No related existing videos were found in the catalog.";
+
+  if (outputMode === "review") {
+    return runReviewMode({ clientId, projectId, platform, rawTranscript, language, contentType, contextNote, contextBlock });
+  }
 
   // Dynamic instead of a fixed constant — a fixed cap either wastes budget
   // on short transcripts or starves long ones (live-tested truncation on a
@@ -368,7 +527,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
     messages: [
       {
         role: "user",
-        content: buildPrompt(contentType, language, contextBlock, rawTranscript),
+        content: buildPrompt(contentType, language, contextBlock, rawTranscript, contextNote),
       },
     ],
   });
@@ -464,6 +623,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
   return {
     id: inserted.id,
     status: "draft",
+    outputMode: "rewrite",
     content: parsed.content,
     hook: parsed.hook,
     chapters,
@@ -473,5 +633,110 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
     podDescription,
     crossReferencedProjectIds: matches.map((m) => m.projectId),
     referencedVideos,
+    reviewOutput: null,
+  };
+}
+
+// Review mode (0013) — separate function, not a branch woven through the
+// rewrite path above: it uses a different tool (REVIEW_TOOL, no `content`
+// property), a fixed small max_tokens (the output is 20 short annotations,
+// not a full script — no dynamic budget needed), skips
+// identifyReferencedVideoIds entirely (there's no generated script content
+// to extract references from), and stores raw_transcript verbatim into
+// `content` since nothing gets rewritten but the column is NOT NULL.
+const REVIEW_MAX_TOKENS = 8000;
+
+async function runReviewMode(input: {
+  clientId: string;
+  projectId: string;
+  platform: ScriptForgeInput["platform"];
+  rawTranscript: string;
+  language: Language;
+  contentType: ContentType;
+  contextNote: string | undefined;
+  contextBlock: string;
+}): Promise<ScriptForgeOutput> {
+  const { clientId, projectId, platform, rawTranscript, language, contentType, contextNote, contextBlock } =
+    input;
+
+  const response = await getOpenRouter().chat.completions.create({
+    model: MODEL,
+    max_tokens: REVIEW_MAX_TOKENS,
+    temperature: 0.4,
+    tools: [REVIEW_TOOL],
+    tool_choice: "required",
+    messages: [
+      {
+        role: "user",
+        content: buildReviewPrompt(rawTranscript, contextNote, contextBlock, language),
+      },
+    ],
+  });
+
+  const toolCall = response.choices[0]?.message?.tool_calls?.[0];
+  if (!toolCall || toolCall.type !== "function" || toolCall.function.name !== REVIEW_TOOL_NAME) {
+    throw new Error("Script Forge (review): model did not return the expected tool call");
+  }
+
+  let parsed: { elements: unknown };
+  try {
+    parsed = JSON.parse(toolCall.function.arguments);
+  } catch {
+    throw new Error("Script Forge (review): model returned malformed tool call arguments");
+  }
+
+  if (!isValidReviewElements(parsed.elements)) {
+    throw new Error("Script Forge (review): model returned malformed elements");
+  }
+  const elements = parsed.elements;
+
+  const embedding = await embedText(rawTranscript);
+
+  const supabase = getSupabaseAdmin();
+  const { data: inserted, error } = await supabase
+    .from("scripts")
+    .insert({
+      client_id: clientId,
+      project_id: projectId,
+      platform,
+      raw_transcript: rawTranscript,
+      // Nothing rewritten in review mode — content stores the original
+      // transcript verbatim since the column is NOT NULL.
+      content: rawTranscript,
+      hook: null,
+      chapters: [],
+      content_type: contentType,
+      clip_script: null,
+      cta_line: null,
+      pod_description: null,
+      referenced_videos: [],
+      review_output: elements,
+      llm_provider: MODEL,
+      status: "draft",
+      embedding,
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(`Script Forge (review): failed to save script: ${error.message}`);
+
+  return {
+    id: inserted.id,
+    status: "draft",
+    outputMode: "review",
+    // Matches the `content` column's stored value (rawTranscript) — see the
+    // insert above for why: nothing was rewritten, but the column is NOT
+    // NULL, and the GET /api/projects/[id] read path returns that same
+    // stored value, so the POST response mirrors it instead of returning
+    // null here and something else on reload.
+    content: rawTranscript,
+    hook: null,
+    chapters: [],
+    contentType,
+    clipScript: null,
+    ctaLine: null,
+    podDescription: null,
+    crossReferencedProjectIds: [],
+    referencedVideos: [],
+    reviewOutput: elements,
   };
 }

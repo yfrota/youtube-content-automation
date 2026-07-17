@@ -16,6 +16,7 @@ import {
   PLATFORM_BADGE_STYLES,
   PLATFORM_LABELS,
   type ApprovalStatus,
+  type OutputMode,
   type ProjectDetail,
   type ScriptDetail,
   type SeoData,
@@ -67,6 +68,10 @@ export default function ProjectDetailPage() {
 
   function handleScriptChange(script: ScriptDetail) {
     setProject((prev) => (prev ? { ...prev, script } : prev));
+  }
+
+  function handleOutputModeChange(outputMode: OutputMode) {
+    setProject((prev) => (prev ? { ...prev, outputMode } : prev));
   }
 
   function handleSeoChange(seo: SeoData) {
@@ -192,6 +197,8 @@ export default function ProjectDetailPage() {
             onScriptChange={handleScriptChange}
             onGeneratingChange={setGeneratingScript}
             onSplitViewActive={setSplitViewActive}
+            outputMode={project.outputMode}
+            onOutputModeChange={handleOutputModeChange}
           />
         </PipelineStage>
 

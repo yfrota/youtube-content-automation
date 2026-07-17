@@ -38,16 +38,25 @@ export async function PATCH(
     );
   }
 
-  // Both fields are optional independently — "Salvar keywords" patches only
-  // keywords_context (status unchanged); "Aprovar roteiro" patches both at
-  // once; "Desfazer aprovação" patches only status back to draft.
-  const update: { status?: ApprovalStatus; keywords_context?: string[] } = {};
+  const editedContent = body?.editedContent as unknown;
+  if (editedContent !== undefined && typeof editedContent !== "string") {
+    return NextResponse.json({ error: "editedContent must be a string" }, { status: 400 });
+  }
+
+  // All fields are optional independently — "Salvar keywords" patches only
+  // keywords_context (status unchanged); "Aprovar roteiro" patches both
+  // status and keywords_context at once; "Desfazer aprovação" patches only
+  // status back to draft; the editable script panel's debounced autosave
+  // (0013) patches only edited_content.
+  const update: { status?: ApprovalStatus; keywords_context?: string[]; edited_content?: string } =
+    {};
   if (status !== undefined) update.status = status;
   if (keywordsContext !== undefined) update.keywords_context = keywordsContext as string[];
+  if (editedContent !== undefined) update.edited_content = editedContent as string;
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json(
-      { error: "at least one of status or keywordsContext is required" },
+      { error: "at least one of status, keywordsContext, or editedContent is required" },
       { status: 400 }
     );
   }
@@ -57,7 +66,7 @@ export async function PATCH(
     .from("scripts")
     .update(update)
     .eq("id", id)
-    .select("id, status, keywords_context")
+    .select("id, status, keywords_context, edited_content")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

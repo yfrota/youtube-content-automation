@@ -15,7 +15,7 @@ import {
 } from "@/components/icons";
 import { useT } from "@/lib/i18n/context";
 import { PRIORITY_LABELS } from "@/lib/dashboard/types";
-import type { ClientProfile, ContentType, Priority } from "@/lib/dashboard/types";
+import type { ClientProfile, ContentType, OutputMode, Priority } from "@/lib/dashboard/types";
 
 function Spinner() {
   return (
@@ -64,6 +64,27 @@ const CONTENT_TYPE_OPTIONS: { value: ContentType; emoji: string; labelKey: strin
   { value: "short_form", emoji: "📱", labelKey: "forms.shortForm" },
 ];
 
+// Script Forge output mode (0013) — separate axis from content type: content
+// type selects the prompt/structure, output mode selects whether Script
+// Forge rewrites the transcript at all or only annotates it. Not translated
+// via useT() (same reasoning as CONTENT_TYPE_OPTIONS not being one either
+// would require — kept as a plain local array since labels/helper text are
+// literal here, not i18n keys).
+const OUTPUT_MODE_OPTIONS: { value: OutputMode; emoji: string; label: string; helper: string }[] = [
+  {
+    value: "rewrite",
+    emoji: "✍️",
+    label: "Reescrever script",
+    helper: "A IA reescreve o transcript no formato YouTube",
+  },
+  {
+    value: "review",
+    emoji: "🔍",
+    label: "Revisar e sugerir",
+    helper: "A IA analisa e sugere melhorias mantendo sua voz",
+  },
+];
+
 const PRIORITIES: Priority[] = ["normal", "high", "urgent", "low"];
 
 export function NewProjectContent() {
@@ -78,6 +99,7 @@ export function NewProjectContent() {
 
   const [title, setTitle] = useState("");
   const [contentType, setContentType] = useState<ContentType>("podcast_vodcast");
+  const [outputMode, setOutputMode] = useState<OutputMode>("rewrite");
   const [platform, setPlatform] = useState<PlatformOption>("youtube");
   const [channelUrl, setChannelUrl] = useState("");
   const [language, setLanguage] = useState<"pt-BR" | "en-US">("pt-BR");
@@ -138,6 +160,7 @@ export function NewProjectContent() {
           clientId,
           platform,
           contentType,
+          outputMode,
           title,
           externalChannelId: channelUrl.trim() || undefined,
           language,
@@ -255,6 +278,39 @@ export function NewProjectContent() {
             </div>
             <span className="text-xs text-gray-400 dark:text-gray-500">
               Define a estrutura e o tamanho do script gerado pelo agente.
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              Modo do Script Forge
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              {OUTPUT_MODE_OPTIONS.map(({ value, emoji, label }) => {
+                const selected = value === outputMode;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setOutputMode(value)}
+                    className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors duration-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/40 ${
+                      selected
+                        ? "border-accent bg-accent/5"
+                        : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    <span className="text-xl" aria-hidden="true">
+                      {emoji}
+                    </span>
+                    <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300">
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              {OUTPUT_MODE_OPTIONS.find((o) => o.value === outputMode)?.helper}
             </span>
           </div>
 

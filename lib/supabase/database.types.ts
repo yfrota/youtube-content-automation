@@ -76,6 +76,9 @@ type ProjectsRow = {
   // dedicated union here; lib/dashboard/types.ts's ContentType is where the
   // real constraint lives, same split as Priority/Platform).
   content_type: string;
+  // Added in 0013 — same bare-string precedent as content_type/priority
+  // above (lib/agents/types.ts's OutputMode is the real constraint).
+  output_mode: string;
   created_at: string;
   updated_at: string;
 };
@@ -115,6 +118,14 @@ type ScriptsRow = {
   // generated script: [{ videoId, title, reason, youtubeUrl }]. Null until
   // a script with non-empty referenced_video_ids is generated.
   referenced_videos: Json | null;
+  // Added in 0013 — review-mode's structured checklist annotations:
+  // [{ element, status, keep?, insert?, flag? }]. Null for rewrite-mode
+  // scripts.
+  review_output: Json | null;
+  // Added in 0013 — user-edited version of `content`, kept separate so the
+  // AI-generated content is never overwritten. Null until the user edits
+  // the rewrite-mode script in ScriptStage's editable panel.
+  edited_content: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -15,6 +15,13 @@ export type Language = "pt-BR" | "en-US";
 // cross-layer pattern as Language/Platform.
 export type ContentType = "youtube_tutorial" | "podcast_vodcast" | "short_form";
 
+// Script Forge output mode, set per-project (see
+// 0013_script_mode_and_review.sql) — 'rewrite' is the original behavior
+// (reproduce the transcript as a YouTube-optimized script); 'review' never
+// rewrites the creator's own words, it only annotates the transcript against
+// a fixed structure/retention/quality checklist.
+export type OutputMode = "rewrite" | "review";
+
 export interface ScriptForgeInput {
   clientId: string;
   projectId: string;
@@ -22,7 +29,25 @@ export interface ScriptForgeInput {
   rawTranscript: string;
   language: Language;
   contentType: ContentType;
+  outputMode: OutputMode;
+  // Optional creator instruction, read before generation and given top
+  // priority in the prompt — e.g. "focus on retention elements in section
+  // 2" in review mode, or "emphasize the personal story at minute 3" in
+  // rewrite mode.
+  contextNote?: string;
 }
+
+// One checklist-element annotation from review mode (0013) — `type`, not
+// `interface`, same structural-typing reason as ScriptChapter (this
+// round-trips through the scripts.review_output jsonb column).
+export type ReviewElement = {
+  name: string;
+  status: "present" | "missing" | "flag";
+  // Only ever one of these three is populated, matching `status`.
+  keep?: string;
+  insert?: { text: string; placement: string };
+  flag?: { issue: string; suggestion: string };
+};
 
 // `type`, not `interface` — interfaces don't get an implicit index
 // signature, which the scripts.chapters jsonb insert relies on structurally.
@@ -44,12 +69,15 @@ export type ReferencedVideo = {
 export interface ScriptForgeOutput {
   id: string;
   status: "draft";
-  content: string;
-  hook: string;
+  outputMode: OutputMode;
+  // Null in review mode — nothing gets rewritten, see reviewOutput instead.
+  content: string | null;
+  hook: string | null;
   chapters: ScriptChapter[];
   contentType: ContentType;
   // podcast_vodcast-only deliverables (0010) — null for youtube_tutorial/
-  // short_form, where the tool is never asked to fill them.
+  // short_form, where the tool is never asked to fill them. Also null in
+  // review mode.
   clipScript: string | null;
   ctaLine: string | null;
   podDescription: string | null;
@@ -57,8 +85,10 @@ export interface ScriptForgeOutput {
   // Added in 0011 — the subset of crossReferencedProjectIds' matches the
   // model actually says it referenced, with its own stated reason per
   // video. Always an array (never null) — empty when the model referenced
-  // nothing.
+  // nothing, or in review mode (identifyReferencedVideoIds isn't run there).
   referencedVideos: ReferencedVideo[];
+  // Populated only in review mode (0013) — null in rewrite mode.
+  reviewOutput: ReviewElement[] | null;
 }
 
 export interface SeoEngineInput {
@@ -76,6 +106,9 @@ export interface SeoEngineInput {
   // multi-provider selector the README describes, scoped to this one call.
   // Defaults to the module-level MODEL constant in seo-engine.ts if omitted.
   llmProvider?: string;
+  // Read from the project row (0013) — 'review' switches the description to
+  // Kelly's fixed soulSHINE template instead of the free-form description.
+  outputMode?: OutputMode;
 }
 
 // `type`, not `interface` — same jsonb-structural-typing reason as

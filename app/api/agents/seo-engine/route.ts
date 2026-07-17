@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { generateSeo } from "@/lib/agents/seo-engine";
+import type { OutputMode } from "@/lib/agents/types";
 
 // Script must have at least cleared internal review before SEO can be
 // generated from it — generating SEO off an unreviewed draft would mean
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   // catalog (see CLAUDE.md's RAG client isolation note).
   const { data: project, error: projectError } = await supabase
     .from("projects")
-    .select("client_id, title, platform, language")
+    .select("client_id, title, platform, language, output_mode")
     .eq("id", body.projectId)
     .maybeSingle();
   if (projectError) {
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
       keywordsContext,
       language: project.language,
       llmProvider: body.llmProvider,
+      outputMode: project.output_mode as OutputMode,
     });
 
     const { data: seo, error: upsertError } = await supabase

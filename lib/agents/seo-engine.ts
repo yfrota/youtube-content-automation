@@ -2,6 +2,51 @@ import OpenAI from "openai";
 import { searchCatalog } from "@/lib/rag/search";
 import type { Language, SeoEngineInput, SeoOutput, SeoTitleOption } from "./types";
 
+// Kelly's fixed soulSHINE description template (0013) — used verbatim
+// (section separators included) instead of the generic free-form
+// description whenever the project is in review mode. Placeholders in
+// brackets are filled by the model; the literal section headers and
+// separators are not.
+const KELLY_DESCRIPTION_TEMPLATE = `↓ What this conversation is about
+[150-200 chars com keywords SEO nos primeiros 200 chars]
+____________________________________________
+This is for the person who…
+– [linha 1]
+– [linha 2]
+– [linha 3]
+____________________________________________
+Inside this conversation
+– [tópico 1]
+– [tópico 2]
+– [tópico 3]
+– [tópico 4]
+____________________________________________
+Chapters
+[timestamps e títulos baseados nos capítulos do script]
+____________________________________________
+Science referenced in this episode:
+– [Autor, Título. Journal, Ano] (só se mencionado no script)
+____________________________________________
+Science concepts discussed:
+[lista de conceitos separados por vírgula]
+____________________________________________
+Keywords:
+[20-30 keywords relevantes separadas por vírgula, incluindo o nome da apresentadora e do show]
+____________________________________________
+✨ About soulSHINE — The Art of Becoming
+Hosted by Dr. Satie Rodriguez — where evidence-based tools meet heart-led living.
+🌐 soulshine.global | 📸 @soulshine_global
+💛 Subscribe and never miss an uplevel.`;
+
+function buildKellyDescriptionBlock(): string {
+  return (
+    "\n\nA descrição (campo `description`) deve seguir este template EXATO — preencha cada " +
+    "seção substituindo os colchetes, não invente seções novas, e mantenha os separadores " +
+    "\"____________________________________________\" entre seções tal como estão:\n\n" +
+    `${KELLY_DESCRIPTION_TEMPLATE}\n`
+  );
+}
+
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const MODEL = "google/gemini-2.5-flash";
 const TOOL_NAME = "emit_seo";
@@ -99,6 +144,7 @@ export async function generateSeo(
     keywordsContext,
     language,
     llmProvider,
+    outputMode,
   } = input;
   const model = llmProvider ?? MODEL;
 
@@ -122,6 +168,8 @@ export async function generateSeo(
 
   const chaptersBlock = chapters.map((c) => `${c.startTime} ${c.title}`).join("\n");
 
+  const kellyBlock = outputMode === "review" ? buildKellyDescriptionBlock() : "";
+
   const response = await getOpenRouter().chat.completions.create({
     model,
     max_tokens: MAX_OUTPUT_TOKENS,
@@ -141,6 +189,7 @@ export async function generateSeo(
           "previous video, always use its TITLE, never an internal id or code):\n" +
           `${contextBlock}` +
           keywordsBlock +
+          kellyBlock +
           `\n\nSCRIPT:\n${scriptContent}`,
       },
     ],

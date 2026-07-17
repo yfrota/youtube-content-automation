@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type {
   ContentType,
+  OutputMode,
   Priority,
   ProjectDetail,
   ReferencedVideo,
+  ReviewElement,
   ScriptChapter,
   SeoTitleOption,
 } from "@/lib/dashboard/types";
@@ -33,7 +35,7 @@ export async function GET(
   const { data: project, error: projectError } = await supabase
     .from("projects")
     .select(
-      "id, title, platform, language, content_type, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
+      "id, title, platform, language, content_type, output_mode, status, client_id, external_channel_id, priority, deadline, tags, created_at, updated_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -61,7 +63,7 @@ export async function GET(
   const { data: scripts, error: scriptsError } = await supabase
     .from("scripts")
     .select(
-      "id, raw_transcript, content, hook, chapters, content_type, clip_script, cta_line, pod_description, keywords_context, referenced_videos, status, version, created_at"
+      "id, raw_transcript, content, hook, chapters, content_type, clip_script, cta_line, pod_description, keywords_context, referenced_videos, review_output, edited_content, status, version, created_at"
     )
     .eq("project_id", id)
     .not("raw_transcript", "is", null)
@@ -103,6 +105,7 @@ export async function GET(
     platform: project.platform,
     language: project.language,
     contentType: project.content_type as ContentType,
+    outputMode: project.output_mode as OutputMode,
     status: project.status,
     client: toClientProfile(clientRow),
     channelUrl: project.external_channel_id,
@@ -126,6 +129,8 @@ export async function GET(
             (latestScript.keywords_context as unknown as string[] | null) ?? null,
           referencedVideos:
             (latestScript.referenced_videos as unknown as ReferencedVideo[] | null) ?? null,
+          reviewOutput: (latestScript.review_output as unknown as ReviewElement[] | null) ?? null,
+          editedContent: latestScript.edited_content,
           status: latestScript.status,
           createdAt: latestScript.created_at,
         }
@@ -151,6 +156,7 @@ export async function GET(
 }
 
 const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
+const VALID_OUTPUT_MODES = ["rewrite", "review"];
 
 // Card editing (title/priority/deadline/tags) — no client_id scoping, same
 // reasoning as GET above.
@@ -175,6 +181,7 @@ export async function PATCH(
     priority?: string;
     deadline?: string | null;
     tags?: string[];
+    output_mode?: string;
   } = {};
   if (body.title !== undefined) {
     if (typeof body.title !== "string" || !body.title.trim()) {
@@ -198,6 +205,15 @@ export async function PATCH(
     }
     update.tags = body.tags;
   }
+  if (body.output_mode !== undefined) {
+    if (!VALID_OUTPUT_MODES.includes(body.output_mode)) {
+      return NextResponse.json(
+        { error: `output_mode must be one of: ${VALID_OUTPUT_MODES.join(", ")}` },
+        { status: 400 }
+      );
+    }
+    update.output_mode = body.output_mode;
+  }
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "No updatable fields provided" }, { status: 400 });
@@ -208,7 +224,7 @@ export async function PATCH(
     .from("projects")
     .update(update)
     .eq("id", id)
-    .select("id, title, priority, deadline, tags, updated_at")
+    .select("id, title, priority, deadline, tags, output_mode, updated_at")
     .maybeSingle();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

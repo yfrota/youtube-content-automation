@@ -5,7 +5,7 @@ import { useToast } from "@/components/dashboard/toast";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ChevronDownIcon, ExternalLinkIcon, SparklesIcon } from "@/components/icons";
 import { useT } from "@/lib/i18n/context";
-import type { Language, Platform, ScriptDetail } from "@/lib/dashboard/types";
+import type { Language, OutputMode, Platform, ReviewElement, ScriptDetail } from "@/lib/dashboard/types";
 
 function Spinner() {
   return (
@@ -80,8 +80,111 @@ function CollapsibleDeliverable({ title, content }: { title: string; content: st
   );
 }
 
+// Review mode (0013) — one card per checklist element, color-coded by
+// status. `useState` for the copy feedback is local to each card instance,
+// which is safe even though transcriptPanel/scriptPanel-style shared JSX
+// consts render this twice (desktop + mobile breakpoints, only one visible
+// via CSS at a time) — unlike the editable script textarea below, this is
+// purely ephemeral UI feedback, not autosaved data, so two independent
+// copies never conflict.
+function statusMeta(status: ReviewElement["status"]): {
+  emoji: string;
+  label: string;
+  classes: string;
+} {
+  switch (status) {
+    case "present":
+      return {
+        emoji: "✅",
+        label: "presente",
+        classes: "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30",
+      };
+    case "flag":
+      return {
+        emoji: "⚠️",
+        label: "flag",
+        classes: "border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950/30",
+      };
+    default:
+      return {
+        emoji: "❌",
+        label: "ausente",
+        classes: "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30",
+      };
+  }
+}
+
+const COPY_FEEDBACK_MS = 2000;
+
+function ReviewElementCard({ element }: { element: ReviewElement }) {
+  const { emoji, label, classes } = statusMeta(element.status);
+  const [copied, setCopied] = useState(false);
+
+  const suggestionText =
+    element.status === "flag"
+      ? element.flag?.suggestion
+      : element.status === "missing"
+        ? element.insert?.text
+        : undefined;
+
+  async function handleCopy() {
+    if (!suggestionText) return;
+    try {
+      await navigator.clipboard.writeText(suggestionText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+    } catch {
+      // Clipboard access can fail (permissions/non-secure context) — same
+      // "fail quiet" precedent as this file's other best-effort calls.
+    }
+  }
+
+  return (
+    <div className={`rounded-lg border p-3 ${classes}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-foreground">
+          {emoji} {element.name}
+        </p>
+        <span className="shrink-0 rounded-full bg-white/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:bg-black/20 dark:text-gray-400">
+          {label}
+        </span>
+      </div>
+
+      {element.status === "present" && element.keep && (
+        <p className="mt-1.5 text-sm text-gray-600 dark:text-gray-300">KEEP: &ldquo;{element.keep}&rdquo;</p>
+      )}
+
+      {element.status === "flag" && element.flag && (
+        <div className="mt-1.5 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-300">
+          <p>FLAG: {element.flag.issue}</p>
+          <p>SUGESTÃO: {element.flag.suggestion}</p>
+        </div>
+      )}
+
+      {element.status === "missing" && element.insert && (
+        <div className="mt-1.5 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-300">
+          <p>INSERT: {element.insert.text}</p>
+          <p>ONDE: {element.insert.placement}</p>
+        </div>
+      )}
+
+      {suggestionText && (
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="mt-2 text-xs font-medium text-accent hover:underline"
+        >
+          {copied ? "Copiado ✓" : "📋 Copiar sugestão"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 const TRENDING_DEBOUNCE_MS = 500;
 const SAVE_KEYWORDS_SUCCESS_MS = 2000;
+const CONTENT_SAVE_DEBOUNCE_MS = 1000;
+const SAVE_CONTENT_SUCCESS_MS = 2000;
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -97,6 +200,11 @@ interface ScriptStageProps {
    * reclaims this stage's own padding, it can't escape an ancestor's
    * max-width. */
   onSplitViewActive?: (active: boolean) => void;
+  /** The project's current Script Forge output mode (0013) — drives the
+   * mode toggle and the context box's placeholder. Persisted per-project,
+   * not per-call, same reasoning as language/contentType. */
+  outputMode: OutputMode;
+  onOutputModeChange: (mode: OutputMode) => void;
 }
 
 export function ScriptStage({
@@ -107,14 +215,36 @@ export function ScriptStage({
   onScriptChange,
   onGeneratingChange,
   onSplitViewActive,
+  outputMode,
+  onOutputModeChange,
 }: ScriptStageProps) {
   const { showToast } = useToast();
   const t = useT();
 
   // Estado 1 — generation
   const [transcript, setTranscript] = useState("");
+  const [contextNote, setContextNote] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+
+  // Mode toggle (0013) — persisted on the project, not per-call.
+  const [modeChanging, setModeChanging] = useState(false);
+  const [modeError, setModeError] = useState<string | null>(null);
+
+  // Estado 2A — rewrite mode's editable script panel (0013). Lifted to this
+  // component (rather than a self-contained subcomponent owning its own
+  // state) because scriptPanel below is a single JSX const rendered twice —
+  // once in the desktop grid, once in the mobile tab slot — and React mounts
+  // each occurrence as an independent instance. A subcomponent with its own
+  // useState would desync between the two, and worse, could double-PATCH.
+  // Keeping the value/save-state here means both occurrences share one
+  // source of truth; only the one actually visible via CSS is ever
+  // interacted with.
+  const [editedContentValue, setEditedContentValue] = useState(
+    () => script?.editedContent ?? script?.content ?? ""
+  );
+  const [contentSaveState, setContentSaveState] = useState<"idle" | "saved">("idle");
+  const contentDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Estado 2 — regenerate (split-view right panel header)
   const [regenerating, setRegenerating] = useState(false);
@@ -153,6 +283,7 @@ export function ScriptStage({
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
   const scriptId = script?.id;
+  const isReviewScript = script?.reviewOutput != null;
 
   // Re-seed selection whenever a different script row becomes current
   // (fresh generation, or switching projects) — not on every keystroke.
@@ -163,6 +294,8 @@ export function ScriptStage({
   if (scriptId !== seededForScriptId) {
     setSeededForScriptId(scriptId);
     setSelectedKeywords(new Set(script?.keywordsContext ?? []));
+    setEditedContentValue(script?.editedContent ?? script?.content ?? "");
+    setContentSaveState("idle");
   }
 
   useEffect(() => {
@@ -174,8 +307,10 @@ export function ScriptStage({
   }, [script?.status]);
 
   // Auto-load extracted keywords the moment a draft script is on screen.
+  // Skipped for review-mode scripts — that flow has no keywords panel
+  // (0013), see the bottom of Estado 2's render.
   useEffect(() => {
-    if (!scriptId || script?.status !== "draft") return;
+    if (!scriptId || script?.status !== "draft" || isReviewScript) return;
     let cancelled = false;
 
     async function load() {
@@ -262,7 +397,12 @@ export function ScriptStage({
       const res = await fetch("/api/agents/script-forge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, platform, rawTranscript: transcript }),
+        body: JSON.stringify({
+          projectId,
+          platform,
+          rawTranscript: transcript,
+          contextNote: contextNote.trim() || undefined,
+        }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error ?? "Falha ao gerar roteiro");
@@ -270,14 +410,15 @@ export function ScriptStage({
       const result = body.script as {
         id: string;
         status: ScriptDetail["status"];
-        content: string;
-        hook: string;
+        content: string | null;
+        hook: string | null;
         chapters: ScriptDetail["chapters"];
         contentType: ScriptDetail["contentType"];
         clipScript: string | null;
         ctaLine: string | null;
         podDescription: string | null;
         referencedVideos: ScriptDetail["referencedVideos"];
+        reviewOutput: ScriptDetail["reviewOutput"];
       };
       onScriptChange({
         id: result.id,
@@ -291,16 +432,62 @@ export function ScriptStage({
         ctaLine: result.ctaLine,
         podDescription: result.podDescription,
         referencedVideos: result.referencedVideos,
+        reviewOutput: result.reviewOutput,
+        editedContent: null,
         keywordsContext: null,
         createdAt: new Date().toISOString(),
       });
-      showToast("Roteiro gerado com sucesso");
+      showToast(
+        result.reviewOutput ? "Revisão gerada com sucesso" : "Roteiro gerado com sucesso"
+      );
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Falha ao gerar roteiro");
     } finally {
       setGenerating(false);
       onGeneratingChange?.(false);
     }
+  }
+
+  async function handleModeChange(mode: OutputMode) {
+    if (mode === outputMode || modeChanging) return;
+    setModeChanging(true);
+    setModeError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ output_mode: mode }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Falha ao alterar modo");
+      onOutputModeChange(mode);
+    } catch (err) {
+      setModeError(err instanceof Error ? err.message : "Falha ao alterar modo");
+    } finally {
+      setModeChanging(false);
+    }
+  }
+
+  function handleContentChange(value: string) {
+    setEditedContentValue(value);
+    if (contentDebounceRef.current) clearTimeout(contentDebounceRef.current);
+    contentDebounceRef.current = setTimeout(async () => {
+      if (!script) return;
+      try {
+        const res = await fetch(`/api/scripts/${script.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ editedContent: value }),
+        });
+        if (!res.ok) return;
+        onScriptChange({ ...script, editedContent: value });
+        setContentSaveState("saved");
+        setTimeout(() => setContentSaveState("idle"), SAVE_CONTENT_SUCCESS_MS);
+      } catch {
+        // Best-effort autosave — same "fail quiet" precedent as trending
+        // search, the user can keep typing regardless.
+      }
+    }, CONTENT_SAVE_DEBOUNCE_MS);
   }
 
   // "Regenerar" in the split-view's right panel — re-runs Script Forge off
@@ -320,6 +507,7 @@ export function ScriptStage({
           projectId,
           platform,
           rawTranscript: script.rawTranscript ?? "",
+          contextNote: contextNote.trim() || undefined,
         }),
       });
       const body = await res.json();
@@ -328,14 +516,15 @@ export function ScriptStage({
       const result = body.script as {
         id: string;
         status: ScriptDetail["status"];
-        content: string;
-        hook: string;
+        content: string | null;
+        hook: string | null;
         chapters: ScriptDetail["chapters"];
         contentType: ScriptDetail["contentType"];
         clipScript: string | null;
         ctaLine: string | null;
         podDescription: string | null;
         referencedVideos: ScriptDetail["referencedVideos"];
+        reviewOutput: ScriptDetail["reviewOutput"];
       };
       onScriptChange({
         id: result.id,
@@ -349,10 +538,12 @@ export function ScriptStage({
         ctaLine: result.ctaLine,
         podDescription: result.podDescription,
         referencedVideos: result.referencedVideos,
+        reviewOutput: result.reviewOutput,
+        editedContent: null,
         keywordsContext: null,
         createdAt: new Date().toISOString(),
       });
-      showToast("Roteiro regenerado");
+      showToast(result.reviewOutput ? "Revisão regenerada" : "Roteiro regenerado");
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Falha ao regenerar roteiro");
     } finally {
@@ -403,7 +594,11 @@ export function ScriptStage({
         status: "kelly_review",
         keywordsContext: [...selectedKeywords],
       });
-      showToast("Roteiro aprovado e enviado para revisão");
+      showToast(
+        script.reviewOutput
+          ? "Revisão aprovada e enviada para produção"
+          : "Roteiro aprovado e enviado para revisão"
+      );
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Falha ao aprovar roteiro");
     } finally {
@@ -432,10 +627,63 @@ export function ScriptStage({
     }
   }
 
+  // Mode toggle (0013) — visible before generating (Estado 1) and while a
+  // rewrite/review draft is still being worked on (Estado 2), hidden once
+  // approved (Estado 3, where the mode that produced it is now fixed
+  // history). Built once here so both insertion points render identically.
+  const modeToggle = (
+    <div className="flex flex-col gap-1.5">
+      <div className="inline-flex w-fit rounded-lg border border-gray-200 p-0.5 dark:border-gray-800">
+        <button
+          type="button"
+          onClick={() => handleModeChange("rewrite")}
+          disabled={modeChanging}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+            outputMode === "rewrite" ? "bg-accent text-white" : "text-gray-500 dark:text-gray-400"
+          }`}
+        >
+          ✍️ Reescrever
+        </button>
+        <button
+          type="button"
+          onClick={() => handleModeChange("review")}
+          disabled={modeChanging}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+            outputMode === "review" ? "bg-accent text-white" : "text-gray-500 dark:text-gray-400"
+          }`}
+        >
+          🔍 Revisar
+        </button>
+      </div>
+      {modeError && <p className="text-xs text-red-600 dark:text-red-400">{modeError}</p>}
+    </div>
+  );
+
+  const contextNoteBox = (
+    <label className="flex flex-col gap-2">
+      <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+        Contexto adicional (opcional)
+      </span>
+      <textarea
+        value={contextNote}
+        onChange={(e) => setContextNote(e.target.value)}
+        rows={3}
+        placeholder={
+          outputMode === "review"
+            ? "Ex: o hook já está forte, foque nos elementos de retenção da Seção 2, priorize open loops"
+            : "Ex: foque no tom espiritual, enfatize a história pessoal do minuto 3, adicione mais urgência no hook"
+        }
+        className="resize-y rounded-lg border border-gray-200 bg-background p-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
+      />
+    </label>
+  );
+
   // ESTADO 1 — no script generated yet.
   if (!script) {
     return (
       <div className="flex flex-col gap-4">
+        {modeToggle}
+
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Transcript bruto
@@ -455,6 +703,8 @@ export function ScriptStage({
             className="min-h-[300px] resize-y rounded-lg border border-gray-200 bg-background p-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700"
           />
         </label>
+
+        {contextNoteBox}
 
         {generateError && (
           <p className="text-sm text-red-600 dark:text-red-400">{generateError}</p>
@@ -480,26 +730,45 @@ export function ScriptStage({
     );
   }
 
-  // ESTADO 3 — approved (kelly_review or beyond). Unchanged — compact
-  // summary, no split view.
+  // ESTADO 3 — approved (kelly_review or beyond). Compact summary, no split
+  // view. Branches on isReviewScript (0013) — a review-mode script has no
+  // hook/chapters to summarize, so it shows checklist element counts
+  // instead.
   if (script.status !== "draft") {
     const keywordCount = script.keywordsContext?.length ?? 0;
+    const reviewCounts = isReviewScript
+      ? {
+          present: script.reviewOutput!.filter((e) => e.status === "present").length,
+          missing: script.reviewOutput!.filter((e) => e.status === "missing").length,
+          flag: script.reviewOutput!.filter((e) => e.status === "flag").length,
+        }
+      : null;
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-start justify-between gap-3">
           <StatusBadge status={script.status} />
         </div>
 
-        <div className="rounded-lg bg-accent/5 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-accent">Hook</p>
-          <p className="mt-1 line-clamp-2 text-sm text-foreground">{script.hook}</p>
-        </div>
+        {reviewCounts ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            ✅ {reviewCounts.present} presente{reviewCounts.present === 1 ? "" : "s"} · ⚠️{" "}
+            {reviewCounts.flag} flag{reviewCounts.flag === 1 ? "" : "s"} · ❌ {reviewCounts.missing}{" "}
+            ausente{reviewCounts.missing === 1 ? "" : "s"}
+          </p>
+        ) : (
+          <>
+            <div className="rounded-lg bg-accent/5 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-accent">Hook</p>
+              <p className="mt-1 line-clamp-2 text-sm text-foreground">{script.hook}</p>
+            </div>
 
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {script.chapters.length} capítulo{script.chapters.length === 1 ? "" : "s"} ·{" "}
-          {keywordCount} keyword{keywordCount === 1 ? "" : "s"} selecionada
-          {keywordCount === 1 ? "" : "s"}
-        </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {script.chapters.length} capítulo{script.chapters.length === 1 ? "" : "s"} ·{" "}
+              {keywordCount} keyword{keywordCount === 1 ? "" : "s"} selecionada
+              {keywordCount === 1 ? "" : "s"}
+            </p>
+          </>
+        )}
 
         {actionError && <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>}
 
@@ -594,12 +863,34 @@ export function ScriptStage({
           )}
 
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              Roteiro completo
-            </p>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-700 dark:text-gray-300">
-              {script.content}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                Roteiro completo
+              </p>
+              {contentSaveState === "saved" && (
+                <span className="animate-fade-in text-[11px] font-medium text-green-600 dark:text-green-400">
+                  ✓ Salvo
+                </span>
+              )}
+            </div>
+            {/* Editable (0013) — value/onChange live in ScriptStage itself,
+                not a self-contained subcomponent, because this scriptPanel
+                const is rendered twice (desktop grid + mobile tab slot) and
+                a locally-stateful subcomponent would desync between the two
+                mounted instances. -mx-2 offsets the padding needed for the
+                focus border so the resting state still lines up with the
+                surrounding text. */}
+            <textarea
+              value={editedContentValue}
+              onChange={(e) => handleContentChange(e.target.value)}
+              ref={(el) => {
+                if (!el) return;
+                el.style.height = "auto";
+                el.style.height = `${el.scrollHeight}px`;
+              }}
+              rows={1}
+              className="-mx-2 mt-2 w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent p-2 text-sm leading-relaxed text-gray-700 outline-none transition-colors duration-200 focus:border-gray-200 focus:bg-background dark:text-gray-300 dark:focus:border-gray-700"
+            />
           </div>
 
           {script.referencedVideos && script.referencedVideos.length > 0 && (
@@ -667,15 +958,39 @@ export function ScriptStage({
     </div>
   );
 
+  // Estado 2B (0013) — review mode's right panel. Same shell as scriptPanel
+  // above, but renders one ReviewElementCard per checklist element instead
+  // of a rewritten script.
+  const reviewOutputPanel = (
+    <div className="flex min-h-[400px] flex-col rounded-lg border border-gray-200 dark:border-gray-800 md:min-h-[500px] md:max-h-[70vh]">
+      <div className="shrink-0 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-accent dark:bg-blue-950/50">
+          🔍 Revisão estruturada
+        </span>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex flex-col gap-3">
+          {(script.reviewOutput ?? []).map((element, i) => (
+            <ReviewElementCard key={`${element.name}-${i}`} element={element} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const rightPanel = isReviewScript ? reviewOutputPanel : scriptPanel;
+
   return (
     <div className="flex flex-col gap-5">
+      {modeToggle}
+
       {/* Desktop split view — 40/60, independent scroll per panel.
           -mx-6 reclaims PipelineStage's own p-6 horizontal padding (its
           exact value, not a generic scale) so the panels reach the stage
           card's edges instead of sitting inset within it. */}
       <div className="-mx-6 hidden gap-4 md:grid md:grid-cols-[2fr_3fr]">
         {transcriptPanel}
-        {scriptPanel}
+        {rightPanel}
       </div>
 
       {/* Mobile — one panel at a time via tabs. Only the panel itself
@@ -704,10 +1019,14 @@ export function ScriptStage({
             {t("scriptStage.stageTitle")}
           </button>
         </div>
-        <div className="-mx-6">{mobileTab === "transcript" ? transcriptPanel : scriptPanel}</div>
+        <div className="-mx-6">{mobileTab === "transcript" ? transcriptPanel : rightPanel}</div>
       </div>
 
-      {/* Seção C — Keywords panel, below the split view/tabs either way */}
+      {/* Seção C — Keywords panel, below the split view/tabs either way.
+          Review-mode scripts skip this entirely (0013) — that flow has no
+          keyword-research step, just the checklist above and "Aprovar
+          revisão" below. */}
+      {!isReviewScript && (
       <div className="flex flex-col gap-4 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
         {selectedKeywords.size > 0 && (
           <div>
@@ -828,6 +1147,7 @@ export function ScriptStage({
           </button>
         </div>
       </div>
+      )}
 
       {(generateError || actionError) && (
         <p className="text-sm text-red-600 dark:text-red-400">{generateError ?? actionError}</p>
@@ -841,7 +1161,7 @@ export function ScriptStage({
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {approving && <Spinner />}
-          {t("scriptStage.approveScript")}
+          {isReviewScript ? "Aprovar revisão" : t("scriptStage.approveScript")}
         </button>
       </div>
     </div>

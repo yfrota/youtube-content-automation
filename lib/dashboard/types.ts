@@ -23,6 +23,11 @@ export type Language = "pt-BR" | "en-US";
 // Platform/Language, not an oversight.
 export type ContentType = "youtube_tutorial" | "podcast_vodcast" | "short_form";
 
+// Script Forge output mode, set per-project (see
+// 0013_script_mode_and_review.sql). Also duplicated in lib/agents/types.ts
+// — same deliberate cross-layer duplication as ContentType/Language.
+export type OutputMode = "rewrite" | "review";
+
 export type ModuleKey = "script" | "seo" | "thumbnail" | "checklist";
 
 export interface PipelineModule {
@@ -91,6 +96,7 @@ export interface Project {
   title: string;
   platform: Platform;
   contentType: ContentType;
+  outputMode: OutputMode;
   client: ClientProfile;
   channelUrl: string | null;
   priority: Priority;
@@ -118,10 +124,23 @@ export type ReferencedVideo = {
   youtubeUrl: string;
 };
 
+// One checklist-element annotation from review mode (0013) — `type`, not
+// `interface`, same structural-typing reason as ScriptChapter (round-trips
+// through scripts.review_output jsonb).
+export type ReviewElement = {
+  name: string;
+  status: "present" | "missing" | "flag";
+  keep?: string;
+  insert?: { text: string; placement: string };
+  flag?: { issue: string; suggestion: string };
+};
+
 export interface ScriptDetail {
   id: string;
   rawTranscript: string | null;
-  content: string;
+  // Null in review mode (0013) — nothing gets rewritten there, see
+  // reviewOutput instead.
+  content: string | null;
   hook: string | null;
   chapters: ScriptChapter[];
   contentType: ContentType;
@@ -139,6 +158,13 @@ export interface ScriptDetail {
   // scripts generated before this existed, empty array when the model
   // referenced nothing this run.
   referencedVideos: ReferencedVideo[] | null;
+  // Review-mode's structured checklist output (0013) — null for
+  // rewrite-mode scripts.
+  reviewOutput: ReviewElement[] | null;
+  // User-edited version of `content`, from rewrite mode's editable panel
+  // (0013) — null until the user edits it; read sites fall back to
+  // `content`.
+  editedContent: string | null;
   status: ApprovalStatus;
   createdAt: string;
 }
@@ -174,6 +200,7 @@ export interface ProjectDetail {
   platform: Platform;
   language: Language;
   contentType: ContentType;
+  outputMode: OutputMode;
   status: ApprovalStatus;
   client: ClientProfile;
   channelUrl: string | null;
