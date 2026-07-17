@@ -980,9 +980,36 @@ export function ScriptStage({
 
   const rightPanel = isReviewScript ? reviewOutputPanel : scriptPanel;
 
+  // Cross-mode generation (fix, post-0013) — the toggle above only changes
+  // the project's output_mode setting (persisted via handleModeChange), it
+  // never touches the script that's already on screen. When the toggle now
+  // disagrees with what this script actually is (isReviewScript), surface a
+  // dedicated button to generate the OTHER kind from the same
+  // rawTranscript. Reuses handleRegenerate/regenerating as-is: the route
+  // reads project.output_mode fresh from the DB on every call, and
+  // handleModeChange's PATCH has already landed by the time this button is
+  // clickable, so "regenerate" under the new mode is exactly this action —
+  // no separate handler or loading state needed.
+  const wantsRewriteButHasReview = outputMode === "rewrite" && isReviewScript;
+  const wantsReviewButHasRewrite = outputMode === "review" && !isReviewScript;
+
   return (
     <div className="flex flex-col gap-5">
       {modeToggle}
+
+      {(wantsRewriteButHasReview || wantsReviewButHasRewrite) && (
+        <div>
+          <button
+            type="button"
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent px-3 text-sm font-medium text-accent transition-colors duration-200 hover:bg-accent/5 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-accent/10"
+          >
+            {regenerating && <Spinner />}
+            {wantsRewriteButHasReview ? "✍️ Gerar Script Reescrito" : "🔍 Gerar Revisão"}
+          </button>
+        </div>
+      )}
 
       {/* Desktop split view — 40/60, independent scroll per panel.
           -mx-6 reclaims PipelineStage's own p-6 horizontal padding (its
