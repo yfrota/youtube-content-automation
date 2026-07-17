@@ -18,7 +18,7 @@ const SORT_OPTIONS: { value: string; labelKey: string }[] = [
 ];
 
 const INPUT_CLASSES =
-  "h-10 rounded-lg border border-gray-200 bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent dark:border-gray-700";
+  "h-10 rounded-[10px] border border-halo-border bg-background px-3 text-sm text-foreground outline-none transition-colors duration-200 placeholder:text-gray-400 focus:border-accent";
 
 interface ProjectsToolbarProps {
   search: string;

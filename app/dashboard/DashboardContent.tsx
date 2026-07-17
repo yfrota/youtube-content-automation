@@ -10,12 +10,13 @@ import { ProjectCard } from "@/components/dashboard/ProjectCard";
 import { ProjectGridSkeleton } from "@/components/dashboard/Skeleton";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { ProjectsToolbar } from "@/components/dashboard/ProjectsToolbar";
+import { StatsRow } from "@/components/dashboard/StatsRow";
 import { EditProjectModal } from "@/components/dashboard/EditProjectModal";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { useToast } from "@/components/dashboard/toast";
 import { HaloMark } from "@/components/logo";
 import { useT } from "@/lib/i18n/context";
-import type { ClientProfile, Project } from "@/lib/dashboard/types";
+import { projectProgress, type ClientProfile, type Project } from "@/lib/dashboard/types";
 
 interface ClientGroup {
   client: ClientProfile;
@@ -34,6 +35,10 @@ export function DashboardContent() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
+  // StatsRow's "Vídeos indexados" KPI — not derivable from `projects`
+  // itself (GET /api/projects excludes catalog-imported rows by design),
+  // fetched once from its own small aggregate endpoint.
+  const [indexedVideos, setIndexedVideos] = useState(0);
 
   const search = searchParams.get("q") ?? "";
   const clientIdFilter = searchParams.get("clientId") ?? "";
@@ -64,6 +69,21 @@ export function DashboardContent() {
       .catch(() => {
         // Non-fatal — the client filter dropdown just stays empty.
       });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetched once, same "non-fatal, fail quiet" precedent as the clients
+  // fetch above — StatsRow's card just reads 0 if this fails.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/dashboard/stats")
+      .then((res) => res.json())
+      .then((body) => {
+        if (!cancelled) setIndexedVideos(body.indexedVideos ?? 0);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -151,39 +171,66 @@ export function DashboardContent() {
     return [...byId.values()].sort((a, b) => a.client.name.localeCompare(b.client.name));
   }, [projects]);
 
+  // Header subtitle's two counts — same "in production"/"awaiting review"
+  // definitions StatsRow's own KPI defs use, kept as a small local
+  // duplicate here rather than imported (StatsRow's are bundled with its
+  // own KPI-selector plumbing, not meant as a shared utility).
+  const headerStats = useMemo(() => {
+    const list = projects ?? [];
+    const inProduction = list.filter((p) => {
+      const progress = projectProgress(p);
+      return progress > 0 && progress < 100;
+    }).length;
+    const awaitingReview = list.filter((p) =>
+      p.modules.some(
+        (m) => (m.key === "script" || m.key === "seo") && m.status === "kelly_review"
+      )
+    ).length;
+    return { inProduction, awaitingReview };
+  }, [projects]);
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950/40">
+    <div className="min-h-screen bg-halo-bg">
       <div className="mx-auto max-w-5xl px-6 py-12 sm:px-8 sm:py-16">
         <Breadcrumb items={[{ label: "Início", href: "/" }, { label: "Dashboard" }]} />
 
         <header className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-light tracking-tight text-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-halo-text">
               {t("dashboard.pageTitle")}
             </h1>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              {t("dashboard.pageSubtitle")}
+            <p className="mt-2 text-sm text-halo-text-muted">
+              {headerStats.inProduction} projeto{headerStats.inProduction === 1 ? "" : "s"} em
+              produção · {headerStats.awaitingReview} aguardando revisão
             </p>
           </div>
 
           <button
             type="button"
             onClick={handleCreate}
-            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-all duration-200 hover:bg-accent-hover"
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-[10px] px-4 text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
+            style={{
+              background: "linear-gradient(135deg, #c4b5fd, #a78bfa)",
+              boxShadow: "0 2px 8px rgba(167,139,250,0.3)",
+            }}
           >
             <PlusIcon className="h-4 w-4" />
             {t("dashboard.newProject")}
           </button>
         </header>
 
-        <div className="mt-6 inline-flex rounded-lg border border-gray-200 p-0.5 dark:border-gray-800">
+        <div className="mt-8">
+          <StatsRow projects={projects ?? []} indexedVideos={indexedVideos} />
+        </div>
+
+        <div className="mt-8 inline-flex rounded-lg border border-halo-border bg-halo-surface p-0.5">
           <button
             type="button"
             onClick={() => updateParams({ view: null })}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 ${
               view === "flat"
-                ? "bg-accent text-white"
-                : "text-gray-500 hover:text-foreground dark:text-gray-400"
+                ? "bg-halo-purple text-white"
+                : "text-halo-text-muted hover:text-halo-text"
             }`}
           >
             Todos os projetos
@@ -193,8 +240,8 @@ export function DashboardContent() {
             onClick={() => updateParams({ view: "byClient" })}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 ${
               view === "byClient"
-                ? "bg-accent text-white"
-                : "text-gray-500 hover:text-foreground dark:text-gray-400"
+                ? "bg-halo-purple text-white"
+                : "text-halo-text-muted hover:text-halo-text"
             }`}
           >
             Por cliente

@@ -10,10 +10,16 @@ export function Avatar({
   name,
   imageUrl,
   className = "h-6 w-6 text-[10px]",
+  gradient = false,
 }: {
   name: string;
   imageUrl: string | null;
   className?: string;
+  /** Soft Studio redesign (ProjectCard) — pastel gradient + white initial
+   * instead of the flat accent-tinted default. Opt-in only: every other
+   * caller (client detail header, project detail header, "Por cliente"
+   * grouping) keeps the original look unless it passes this explicitly. */
+  gradient?: boolean;
 }) {
   if (imageUrl) {
     return (
@@ -31,7 +37,10 @@ export function Avatar({
   const initial = name.trim().charAt(0).toUpperCase() || "?";
   return (
     <span
-      className={`flex shrink-0 items-center justify-center rounded-full bg-accent/15 font-medium text-accent ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full font-medium ${
+        gradient ? "text-white" : "bg-accent/15 text-accent"
+      } ${className}`}
+      style={gradient ? { background: "linear-gradient(135deg, #f9a8d4, #c4b5fd)" } : undefined}
       aria-hidden="true"
     >
       {initial}

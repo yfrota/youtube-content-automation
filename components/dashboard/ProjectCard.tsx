@@ -2,22 +2,30 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDownIcon, ExclamationIcon } from "@/components/icons";
+import type { ComponentType, SVGProps } from "react";
+import {
+  ExclamationIcon,
+  FacebookIcon,
+  InstagramIcon,
+  LinkedinIcon,
+  PlayCircleIcon,
+  SpotifyIcon,
+  TiktokIcon,
+} from "@/components/icons";
 import {
   MODULE_LABELS,
   PLATFORM_BADGE_STYLES,
   PLATFORM_LABELS,
-  PRIORITY_BADGE_STYLES,
   PRIORITY_BORDER_COLORS,
-  PRIORITY_LABELS,
+  isModuleDone,
   projectProgress,
+  type ModuleKey,
+  type Platform,
   type Project,
 } from "@/lib/dashboard/types";
 import { relativeTime } from "@/lib/time";
 import { Avatar } from "./Avatar";
-import { ProgressBar } from "./ProgressBar";
 import { ProjectActionsMenu } from "./ProjectActionsMenu";
-import { DOT_STYLES, isAwaitingReview } from "./statusStyles";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -44,6 +52,34 @@ function deadlineUrgency(iso: string): "overdue" | "soon" | "normal" {
   return "normal";
 }
 
+// Same generic-outline-glyph precedent as the new-project form's platform
+// picker (not brand wordmarks) — duplicated locally rather than importing
+// that file's array since it's module-local there too.
+const PLATFORM_ICONS: Record<Platform, ComponentType<SVGProps<SVGSVGElement>>> = {
+  youtube: PlayCircleIcon,
+  instagram: InstagramIcon,
+  linkedin: LinkedinIcon,
+  facebook: FacebookIcon,
+  spotify: SpotifyIcon,
+  tiktok: TiktokIcon,
+};
+
+// Abbreviated stage labels for the card's tiny (text-[9px]) stage row —
+// MODULE_LABELS itself stays untouched (used elsewhere for full-word
+// contexts: the detail page's stepper, this card's own title tooltip).
+const STAGE_SHORT_LABELS: Record<ModuleKey, string> = {
+  script: "Roteiro",
+  seo: "SEO",
+  thumbnail: "Thumb",
+  checklist: "Check",
+};
+
+const STAGE_DOT_COLOR = {
+  done: "#6ee7b7",
+  active: "#c4b5fd",
+  pending: "#e5ddd2",
+} as const;
+
 export function ProjectCard({
   project,
   onEdit,
@@ -56,9 +92,15 @@ export function ProjectCard({
   const router = useRouter();
   const progress = projectProgress(project);
   const platformStyle = PLATFORM_BADGE_STYLES[project.platform];
-  const priorityBadgeStyle = PRIORITY_BADGE_STYLES[project.priority];
+  const PlatformIcon = PLATFORM_ICONS[project.platform];
   const priorityBorderColor = PRIORITY_BORDER_COLORS[project.priority];
   const urgency = project.deadline ? deadlineUrgency(project.deadline) : null;
+
+  // First not-yet-done module is "active" (purple) — every module before it
+  // is "done" (green), every module after it is "pending" (beige). Draft
+  // AND kelly_review/client_review both count as "not done" here, so a
+  // module awaiting review still reads as the active stage, not pending.
+  const firstIncompleteIndex = project.modules.findIndex((m) => !isModuleDone(m.status));
 
   return (
     // Not a <Link> wrapping everything — ProjectActionsMenu needs a real
@@ -74,55 +116,33 @@ export function ProjectCard({
           ? { borderLeftWidth: "3px", borderLeftColor: priorityBorderColor }
           : undefined
       }
-      className={`group relative cursor-pointer rounded-xl border border-gray-200 bg-background p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:border-gray-800 dark:hover:border-gray-700 ${
+      className={`group relative cursor-pointer rounded-[16px] border border-halo-border bg-halo-surface p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(196,181,253,0.15)] ${
         priorityBorderColor ? "border-l-[3px]" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Avatar name={project.client.name} imageUrl={project.client.imageUrl} />
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-gray-500 dark:text-gray-400">
-              {project.client.name}
-            </p>
-            {project.channelUrl && (
-              <p className="truncate text-[11px] text-gray-400 dark:text-gray-500">
-                {project.channelUrl}
-              </p>
-            )}
-          </div>
+          <Avatar name={project.client.name} imageUrl={project.client.imageUrl} gradient />
+          <p className="truncate text-xs font-medium text-halo-text-muted">
+            {project.client.name}
+          </p>
         </div>
-
-        <div className="flex shrink-0 items-center gap-1.5">
-          {priorityBadgeStyle && (
-            <span className={`text-[10px] font-medium uppercase tracking-wide ${priorityBadgeStyle}`}>
-              {PRIORITY_LABELS[project.priority]}
-            </span>
-          )}
-          <ProjectActionsMenu onEdit={onEdit} onDelete={onDelete} />
-        </div>
+        <ProjectActionsMenu onEdit={onEdit} onDelete={onDelete} />
       </div>
 
-      <div className="mt-3 flex items-start justify-between gap-3">
-        <Link
-          href={`/projects/${project.id}`}
-          onClick={(e) => e.stopPropagation()}
-          className="text-base font-normal leading-snug text-foreground hover:underline"
-        >
-          {project.title}
-        </Link>
-        <span
-          style={{ background: platformStyle.background, color: platformStyle.color }}
-          className="flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-        >
-          {PLATFORM_LABELS[project.platform]}
-        </span>
-      </div>
+      <Link
+        href={`/projects/${project.id}`}
+        onClick={(e) => e.stopPropagation()}
+        className="mt-3 block text-base font-normal leading-snug text-halo-text hover:underline"
+      >
+        {project.title}
+      </Link>
 
-      <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
-        Criado {relativeTime(project.createdAt)} · Editado {relativeTime(project.updatedAt)}
-      </p>
+      <p className="mt-1.5 text-xs text-halo-text-muted">Editado {relativeTime(project.updatedAt)}</p>
 
+      {/* Priority/deadline mechanics unchanged — only the border-left color
+          and this warning line stay; the priority text badge that used to
+          sit next to the menu icon is dropped (not in the new card layout). */}
       {project.deadline && (
         <p
           className={`mt-1 flex items-center gap-1 text-xs ${
@@ -139,33 +159,46 @@ export function ProjectCard({
       )}
 
       <div className="mt-5 flex items-center gap-3">
-        <ProgressBar value={progress} />
-        <span className="shrink-0 text-xs tabular-nums text-gray-400 dark:text-gray-500">
-          {progress}%
-        </span>
+        <div className="h-[5px] w-full overflow-hidden rounded-full bg-[#f5f1ea]">
+          <div
+            className="h-full rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${progress}%`, background: "linear-gradient(90deg, #c4b5fd, #f9a8d4)" }}
+          />
+        </div>
+        <span className="shrink-0 text-xs tabular-nums text-halo-text-muted">{progress}%</span>
       </div>
 
-      <div className="mt-4 flex items-center justify-between">
-        <ul className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          {project.modules.map((mod) => (
+      <ul className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {project.modules.map((mod, i) => {
+          const state = isModuleDone(mod.status)
+            ? "done"
+            : i === firstIncompleteIndex
+              ? "active"
+              : "pending";
+          return (
             <li
               key={mod.key}
-              className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400"
+              className="flex items-center gap-1 text-[9px] font-medium text-halo-text-muted"
               title={MODULE_LABELS[mod.key]}
             >
-              <span className="relative flex h-2 w-2">
-                {isAwaitingReview(mod.status) && (
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-                )}
-                <span
-                  className={`relative inline-flex h-2 w-2 rounded-full ${DOT_STYLES[mod.status]}`}
-                />
-              </span>
-              {MODULE_LABELS[mod.key]}
+              <span
+                className="h-[6px] w-[6px] shrink-0 rounded-full"
+                style={{ backgroundColor: STAGE_DOT_COLOR[state] }}
+              />
+              {STAGE_SHORT_LABELS[mod.key]}
             </li>
-          ))}
-        </ul>
-        <ChevronDownIcon className="h-4 w-4 shrink-0 -rotate-90 text-gray-400 transition-transform duration-200 group-hover:translate-x-0.5" />
+          );
+        })}
+      </ul>
+
+      <div className="mt-5 flex justify-center">
+        <span
+          className="inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1 text-[9px] font-bold uppercase tracking-wide text-white"
+          style={{ background: platformStyle.background }}
+        >
+          <PlatformIcon className="h-3 w-3" />
+          {PLATFORM_LABELS[project.platform]}
+        </span>
       </div>
     </div>
   );

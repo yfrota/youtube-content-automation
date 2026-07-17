@@ -1,69 +1,47 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HaloMark } from "@/components/logo";
+import { HaloLogo } from "@/components/logo";
 import { useT } from "@/lib/i18n/context";
 import { NAV_ITEMS } from "./navItems";
 
+// Soft Studio redesign — fixed-width sidebar with labels always visible (no
+// icon-only collapsed state, unlike the previous expand-on-click version),
+// colored dots instead of icons, and the same HaloLogo+wordmark pairing
+// /login already uses for the brand identity.
 export function Sidebar() {
-  const [expanded, setExpanded] = useState(false);
   const pathname = usePathname();
   const t = useT();
 
   return (
-    <aside
-      className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-gray-100 bg-background transition-all duration-200 ease-out md:flex dark:border-gray-800/80 ${
-        expanded ? "w-60" : "w-16"
-      }`}
-    >
-      {/* Brand mark doubles as the expand/collapse toggle — symbol always
-          visible, wordmark fades in only when expanded. */}
-      <div className="flex h-16 items-center gap-2 px-3">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-label={expanded ? "Recolher menu" : "Expandir menu"}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/70"
-        >
-          <HaloMark className="h-9 w-9" />
-        </button>
-        <span
-          className={`overflow-hidden whitespace-nowrap text-sm font-extralight text-foreground transition-opacity duration-200 ${
-            expanded ? "opacity-100" : "pointer-events-none opacity-0"
-          }`}
-          style={{ letterSpacing: "4px" }}
-        >
-          Halo Studio
-        </span>
+    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-halo-border bg-halo-surface md:flex">
+      <div className="flex h-16 items-center gap-2.5 px-5">
+        <HaloLogo size={34} />
+        <span className="text-sm font-semibold tracking-[0.14em] text-halo-text">HALO</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
-        {NAV_ITEMS.map(({ href, labelKey, Icon }) => {
+        {NAV_ITEMS.map(({ href, labelKey, dotColor, activeBg, activeText }) => {
           const label = t(labelKey);
-          const active =
-            pathname === href ||
-            (href === "/dashboard" && pathname === "/dashboard");
+          const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
-              title={label}
-              className={`flex h-10 items-center gap-3 rounded-lg px-3 transition-colors duration-200 ${
+              className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors duration-200 ${
                 active
-                  ? "bg-gray-100 text-foreground dark:bg-gray-800/70"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-foreground dark:text-gray-400 dark:hover:bg-gray-800/40"
+                  ? "font-medium"
+                  : "font-normal text-halo-text-muted hover:bg-halo-bg hover:text-halo-text"
               }`}
+              style={active ? { backgroundColor: activeBg, color: activeText } : undefined}
             >
-              <Icon className="h-5 w-5 shrink-0" />
               <span
-                className={`overflow-hidden whitespace-nowrap text-sm transition-opacity duration-200 ${
-                  expanded ? "opacity-100" : "pointer-events-none opacity-0"
-                }`}
-              >
-                {label}
-              </span>
+                className="h-[7px] w-[7px] shrink-0 rounded-full"
+                style={{ backgroundColor: dotColor }}
+                aria-hidden="true"
+              />
+              {label}
             </Link>
           );
         })}
