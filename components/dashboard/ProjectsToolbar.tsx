@@ -37,8 +37,15 @@ interface ProjectsToolbarProps {
   clientId: string;
   onClientChange: (value: string) => void;
   clients: ClientProfile[];
+  // Both default true. /projects (ProjectsView) hides whichever dimension is
+  // already covered by the active sidebar folder — e.g. grouped by
+  // Plataforma, the folder already sets `platform`, so this toolbar only
+  // needs to offer the cross-filter (client), not a redundant platform
+  // dropdown.
+  showClientFilter?: boolean;
   platform: string;
   onPlatformChange: (value: string) => void;
+  showPlatformFilter?: boolean;
   tag: string;
   onTagChange: (value: string) => void;
   sortValue: string;
@@ -51,8 +58,10 @@ export function ProjectsToolbar({
   clientId,
   onClientChange,
   clients,
+  showClientFilter = true,
   platform,
   onPlatformChange,
+  showPlatformFilter = true,
   tag,
   onTagChange,
   sortValue,
@@ -85,31 +94,35 @@ export function ProjectsToolbar({
         />
       </div>
 
-      <select
-        value={clientId}
-        onChange={(e) => onClientChange(e.target.value)}
-        className={`${INPUT_CLASSES} sm:w-44`}
-      >
-        <option value="">{t("dashboard.allClients")}</option>
-        {clients.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+      {showClientFilter && (
+        <select
+          value={clientId}
+          onChange={(e) => onClientChange(e.target.value)}
+          className={`${INPUT_CLASSES} sm:w-44`}
+        >
+          <option value="">{t("dashboard.allClients")}</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      )}
 
-      <select
-        value={platform}
-        onChange={(e) => onPlatformChange(e.target.value)}
-        className={`${INPUT_CLASSES} sm:w-40`}
-      >
-        <option value="">Todas as plataformas</option>
-        {PLATFORM_OPTIONS.map((p) => (
-          <option key={p} value={p}>
-            {PLATFORM_LABELS[p]}
-          </option>
-        ))}
-      </select>
+      {showPlatformFilter && (
+        <select
+          value={platform}
+          onChange={(e) => onPlatformChange(e.target.value)}
+          className={`${INPUT_CLASSES} sm:w-40`}
+        >
+          <option value="">Todas as plataformas</option>
+          {PLATFORM_OPTIONS.map((p) => (
+            <option key={p} value={p}>
+              {PLATFORM_LABELS[p]}
+            </option>
+          ))}
+        </select>
+      )}
 
       <input
         type="text"
