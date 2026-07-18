@@ -7,7 +7,14 @@ import { LLMSelector } from "@/components/project-detail/LLMSelector";
 import { ChevronDownIcon, ExternalLinkIcon, SparklesIcon } from "@/components/icons";
 import { useT } from "@/lib/i18n/context";
 import { getLLMProviderName } from "@/lib/llm/providers";
-import type { Language, OutputMode, Platform, ReviewElement, ScriptDetail } from "@/lib/dashboard/types";
+import type {
+  Language,
+  OutputMode,
+  Platform,
+  ReferencedVideo,
+  ReviewElement,
+  ScriptDetail,
+} from "@/lib/dashboard/types";
 
 function Spinner() {
   return (
@@ -82,6 +89,47 @@ function CollapsibleDeliverable({ title, content }: { title: string; content: st
   );
 }
 
+// Shared by rewrite mode's "Vídeos referenciados" section and review mode's
+// per-element referencedVideos (0015) — same mini-card visual, same
+// underlying ReferencedVideo shape either way.
+function ReferencedVideosList({ videos }: { videos: ReferencedVideo[] }) {
+  const t = useT();
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      {videos.map((video) => (
+        <div
+          key={video.videoId}
+          className="flex gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`}
+            alt={video.title}
+            width={60}
+            height={45}
+            className="h-[45px] w-[60px] shrink-0 rounded object-cover"
+          />
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="line-clamp-2 text-sm font-medium text-foreground">{video.title}</p>
+            {video.reason && (
+              <p className="text-xs text-gray-400 dark:text-gray-500">{video.reason}</p>
+            )}
+            <a
+              href={video.youtubeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+            >
+              <ExternalLinkIcon className="h-3 w-3" />
+              {t("scriptStage.viewOnYoutube")}
+            </a>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Review mode (0013) — one card per checklist element, color-coded by
 // status. `useState` for the copy feedback is local to each card instance,
 // which is safe even though transcriptPanel/scriptPanel-style shared JSX
@@ -119,6 +167,7 @@ function statusMeta(status: ReviewElement["status"]): {
 const COPY_FEEDBACK_MS = 2000;
 
 function ReviewElementCard({ element }: { element: ReviewElement }) {
+  const t = useT();
   const { emoji, label, classes } = statusMeta(element.status);
   const [copied, setCopied] = useState(false);
 
@@ -167,6 +216,15 @@ function ReviewElementCard({ element }: { element: ReviewElement }) {
         <div className="mt-1.5 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-300">
           <p>INSERT: {element.insert.text}</p>
           <p>ONDE: {element.insert.placement}</p>
+        </div>
+      )}
+
+      {element.referencedVideos && element.referencedVideos.length > 0 && (
+        <div className="mt-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            📺 {t("scriptStage.referencedVideos")}
+          </p>
+          <ReferencedVideosList videos={element.referencedVideos} />
         </div>
       )}
 
@@ -934,40 +992,7 @@ export function ScriptStage({
               <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
                 📺 {t("scriptStage.referencedVideos")}
               </p>
-              <div className="mt-2 flex flex-col gap-2">
-                {script.referencedVideos.map((video) => (
-                  <div
-                    key={video.videoId}
-                    className="flex gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`}
-                      alt={video.title}
-                      width={60}
-                      height={45}
-                      className="h-[45px] w-[60px] shrink-0 rounded object-cover"
-                    />
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <p className="line-clamp-2 text-sm font-medium text-foreground">
-                        {video.title}
-                      </p>
-                      {video.reason && (
-                        <p className="text-xs text-gray-400 dark:text-gray-500">{video.reason}</p>
-                      )}
-                      <a
-                        href={video.youtubeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-                      >
-                        <ExternalLinkIcon className="h-3 w-3" />
-                        {t("scriptStage.viewOnYoutube")}
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ReferencedVideosList videos={script.referencedVideos} />
             </div>
           )}
 

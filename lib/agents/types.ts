@@ -56,6 +56,11 @@ export type ReviewElement = {
   keep?: string;
   insert?: { text: string; placement: string };
   flag?: { issue: string; suggestion: string };
+  // Catalog videos suggested for this element (checklist items 7/20 — episode
+  // cross-referencing) — resolved server-side against this run's own RAG
+  // matches, same "never trust a model-returned id verbatim" precedent as
+  // ReferencedVideo in rewrite mode. Undefined for every other element.
+  referencedVideos?: ReferencedVideo[];
 };
 
 // `type`, not `interface` — interfaces don't get an implicit index

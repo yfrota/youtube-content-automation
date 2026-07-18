@@ -138,6 +138,37 @@ const REVIEW_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
                 },
                 required: ["issue", "suggestion"],
               },
+              // Only for the two episode-cross-referencing elements (7 and
+              // 20) when status=missing and the RAG context below has a
+              // relevant match. title/videoId must be copied verbatim from
+              // that context, never invented — the server resolves videoId
+              // against this run's own RAG matches and drops anything that
+              // doesn't match, same "never trust a model-returned id"
+              // precedent as identifyReferencedVideoIds in rewrite mode.
+              referenced_videos: {
+                type: "array",
+                description:
+                  "Catalog videos to suggest referencing, for elements 7/20 only. Omit entirely " +
+                  "when there's no relevant video in the RAG context below.",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: {
+                      type: "string",
+                      description: "Exact title copied from the RAG context, never invented.",
+                    },
+                    videoId: {
+                      type: "string",
+                      description: "Exact id copied from the RAG context (the 'id: ...' part).",
+                    },
+                    reason: {
+                      type: "string",
+                      description: "Why this video connects naturally to the current episode's theme.",
+                    },
+                  },
+                  required: ["title", "videoId", "reason"],
+                },
+              },
             },
             required: ["name", "status"],
           },
@@ -418,7 +449,12 @@ function buildReviewPrompt(
     "5. Subscribe Moment: atrelado a valor, não genérico, após insight significativo.\n" +
     "6. Call-to-Action: no final E mid-episode.\n" +
     "7. Referência a episódio anterior: ~30-40% do episódio, 10-15 segundos, link na " +
-    "descrição.\n\n" +
+    "descrição. Avalie se o transcript já menciona algum episódio anterior do canal. Se não " +
+    "menciona e a lista de VÍDEOS RELACIONADOS DO CANAL abaixo tiver algum vídeo relevante " +
+    "para o tema deste episódio, classifique como INSERT — insert.text sugere COMO conectar " +
+    "naturalmente ao tema atual (usando o TÍTULO do vídeo, nunca o id) e insert.placement " +
+    "indica onde inserir — e preencha também referenced_videos com esse(s) vídeo(s), copiando " +
+    "title/videoId exatamente como aparecem na lista.\n\n" +
     "SEÇÃO 2 — RETENÇÃO (8 elementos):\n" +
     "8. Open Loops: 2-3 por episódio, pergunta plantada cedo respondida tarde.\n" +
     "9. Pattern Interrupts: a cada 2-3 min, reset verbal (\"But here's what nobody tells " +
@@ -434,9 +470,15 @@ function buildReviewPrompt(
     "17. Precisão científica: autor, ano, achado corretos.\n" +
     "18. Keywords SEO: aparecem naturalmente no transcript falado.\n" +
     "19. Voz natural preservada: conversacional, não palestra.\n" +
-    "20. Cross-references verbais: episódios mencionados falados, não só na descrição.\n\n" +
+    "20. Cross-references verbais: episódios mencionados falados, não só na descrição. Mesma " +
+    "lógica do elemento 7 — se ausente e houver vídeo relevante na lista abaixo, INSERT + " +
+    "referenced_videos.\n\n" +
     "VÍDEOS RELACIONADOS DO CANAL (relevantes para avaliar os elementos 7 e 20):\n" +
     `${ragContext}\n\n` +
+    "Use referenced_videos (campo opcional de cada elemento) apenas nos elementos 7 e 20, " +
+    "apenas quando status=missing, e apenas com title/videoId copiados literalmente da lista " +
+    "acima — nunca invente um vídeo fora dela. Se nenhum vídeo da lista for relevante, ou a " +
+    "lista estiver vazia, não preencha referenced_videos.\n\n" +
     `TRANSCRIPT ORIGINAL:\n${rawTranscript}`
   );
 }
@@ -534,6 +576,7 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
       contentType,
       contextNote,
       contextBlock,
+      matches,
       model,
       icpContext,
     });
@@ -711,6 +754,37 @@ export async function runScriptForge(input: ScriptForgeInput): Promise<ScriptFor
 // `content` since nothing gets rewritten but the column is NOT NULL.
 const REVIEW_MAX_TOKENS = 8000;
 
+// Same cross-referencing precedent as identifyReferencedVideoIds in rewrite
+// mode: the model's own referenced_videos entries are never trusted
+// verbatim, only videoIds that resolve against this run's own RAG matches
+// become a real ReferencedVideo (with a real title/youtubeUrl pulled from
+// the match, not whatever the model wrote). Returns undefined (not an empty
+// array) when nothing resolves, so callers can omit the field entirely
+// rather than storing a pointless `[]` on every element.
+function resolveElementReferencedVideos(
+  raw: unknown,
+  matches: RagMatch[]
+): ReferencedVideo[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const resolved = raw
+    .map((entry): ReferencedVideo | null => {
+      if (typeof entry !== "object" || entry === null) return null;
+      const videoId = (entry as Record<string, unknown>).videoId;
+      if (typeof videoId !== "string") return null;
+      const match = matches.find((m) => m.externalVideoId === videoId);
+      if (!match) return null;
+      const reason = (entry as Record<string, unknown>).reason;
+      return {
+        videoId: match.externalVideoId,
+        title: match.title,
+        reason: typeof reason === "string" ? reason : "",
+        youtubeUrl: `https://youtube.com/watch?v=${match.externalVideoId}`,
+      };
+    })
+    .filter((v): v is ReferencedVideo => v !== null);
+  return resolved.length > 0 ? resolved : undefined;
+}
+
 async function runReviewMode(input: {
   clientId: string;
   projectId: string;
@@ -720,6 +794,7 @@ async function runReviewMode(input: {
   contentType: ContentType;
   contextNote: string | undefined;
   contextBlock: string;
+  matches: RagMatch[];
   model: string;
   icpContext: string | undefined;
 }): Promise<ScriptForgeOutput> {
@@ -732,6 +807,7 @@ async function runReviewMode(input: {
     contentType,
     contextNote,
     contextBlock,
+    matches,
     model,
     icpContext,
   } = input;
@@ -765,7 +841,15 @@ async function runReviewMode(input: {
   if (!isValidReviewElements(parsed.elements)) {
     throw new Error("Script Forge (review): model returned malformed elements");
   }
-  const elements = parsed.elements;
+  // isValidReviewElements only guards name/status — referenced_videos (the
+  // tool schema's snake_case property) still needs its own resolution pass
+  // per element before it becomes the camelCase ReferencedVideo[] the rest
+  // of the app expects.
+  const elements: ReviewElement[] = parsed.elements.map((element) => {
+    const rawReferencedVideos = (element as Record<string, unknown>).referenced_videos;
+    const referencedVideos = resolveElementReferencedVideos(rawReferencedVideos, matches);
+    return referencedVideos ? { ...element, referencedVideos } : element;
+  });
 
   const embedding = await embedText(rawTranscript);
 

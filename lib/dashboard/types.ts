@@ -194,6 +194,10 @@ export type ReviewElement = {
   keep?: string;
   insert?: { text: string; placement: string };
   flag?: { issue: string; suggestion: string };
+  // Catalog videos suggested for this element (checklist items 7/20) —
+  // resolved server-side against real RAG matches, same shape/guarantee as
+  // ReferencedVideo above. Undefined for every other element.
+  referencedVideos?: ReferencedVideo[];
 };
 
 export interface ScriptDetail {
